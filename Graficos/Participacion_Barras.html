@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Participación</title>
+  <link rel="icon" href="../favicon.ico" type="image/x-icon">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Montserrat', sans-serif;
+      background: #f0f2f5;
+      color: #333;
+      min-height: 100vh;
+    }
+
+    /* ── HEADER ── */
+    .page-header {
+      background: #fff;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .page-title {
+      font-size: 15px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: #333;
+      flex: 1;
+    }
+    .file-status { font-size: 11px; color: #888; white-space: nowrap; }
+    .file-status.loaded { color: #4f81bd; font-weight: 600; }
+    .upload-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      background: #4f81bd;
+      color: #fff;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background .15s;
+      border: none;
+    }
+    .upload-btn:hover { background: #3a6a9e; }
+
+    /* ── FILTERS ── */
+    .filters-bar {
+      background: #fff;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 10px 24px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      flex: 1;
+      min-width: 150px;
+    }
+    .filter-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+    select {
+      font-family: inherit;
+      font-size: 12px;
+      border: 1px solid #d0d0d0;
+      border-radius: 5px;
+      padding: 5px 8px;
+      background: #fafafa;
+      color: #333;
+      outline: none;
+      transition: border-color .15s;
+      cursor: pointer;
+    }
+    select:hover  { border-color: #4f81bd; }
+    select:focus  { border-color: #4f81bd; box-shadow: 0 0 0 2px rgba(79,129,189,.15); }
+    select[multiple] { resize: none; }
+
+    /* ── VER % ── */
+    .bottom-bar {
+      background: #fff;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 8px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .checkbox-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #555;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .checkbox-label input { cursor: pointer; }
+
+    /* ── MAIN ── */
+    .main { padding: 16px 24px 24px; }
+
+    .charts-row {
+      display: flex;
+      gap: 10px;
+    }
+    .chart-wrap {
+      flex: 1;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+      padding: 12px 8px 8px;
+      display: flex;
+      flex-direction: column;
+    }
+    .sort-row {
+      display: flex;
+      justify-content: center;
+      gap: 100px;
+      margin-bottom: 4px;
+    }
+    .sort-btn {
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 3px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: 800;
+    }
+    .btn-mdo         { background: #dce6f2; color: #555; }
+    .btn-mdo.inactive{ opacity: .45; }
+    .btn-crf         { background: #4f81bd; color: #fff; }
+    .btn-crf.inactive{ opacity: .45; }
+    .chart-div { flex: none; }
+    .empty-state {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 300px;
+      color: #ccc;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="page-header">
+  <span id="SpanTituloGraficos" class="page-title">Análisis de Categorías — Participación</span>
+  <label class="upload-btn">
+    <input type="file" id="fileInput" accept=".xlsx" style="display:none">
+    &#128194; Cargar Excel
+  </label>
+  <span class="file-status" id="fileStatus">Sin archivo cargado</span>
+</header>
+
+<!-- FILTERS -->
+<div class="filters-bar">
+  <div class="filter-group">
+    <span class="filter-label">Región</span>
+    <select id="regionSel" multiple size="4"></select>
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">Planograma</span>
+    <select id="planSel" multiple size="4"></select>
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">UN</span>
+    <select id="unSel" multiple size="4"></select>
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">Marca</span>
+    <select id="marcaSel" multiple size="4"></select>
+  </div>
+</div>
+
+<!-- VER % + AGRUPAR POR -->
+<div class="bottom-bar">
+  <label class="checkbox-label">
+    <input type="checkbox" id="showPctChk"> Ver %
+  </label>
+  <label class="checkbox-label">
+    <input type="checkbox" id="showIPChk"> Ver IP
+  </label>
+  <label class="checkbox-label">
+    <input type="checkbox" id="showShareChk"> Ver Share
+  </label>
+  <div style="display:flex; flex-direction:column; gap:3px;">
+    <span class="filter-label">Agrupar por</span>
+    <select id="groupBySel" style="min-width:130px;">
+      <option value="PLANOGRAMA">Planograma</option>
+      <option value="UN">UN</option>
+      <option value="MARCA" selected>Marcas</option>
+    </select>
+  </div>
+</div>
+
+<!-- CHARTS -->
+<main class="main">
+  <div class="charts-row">
+
+    <!-- Importe -->
+    <div class="chart-wrap">
+      <div class="sort-row">
+        <button class="sort-btn btn-mdo inactive" id="btnImpMdo">MDO %$</button>
+        <button class="sort-btn btn-crf"          id="btnImpCrf">CRF %$</button>
+      </div>
+      <div class="chart-div" id="chartImp">
+        <div class="empty-state">Cargá el archivo Excel para comenzar</div>
+      </div>
+    </div>
+
+    <!-- Unidades -->
+    <div class="chart-wrap">
+      <div class="sort-row">
+        <button class="sort-btn btn-mdo inactive" id="btnUniMdo">MDO %uni</button>
+        <button class="sort-btn btn-crf"          id="btnUniCrf">CRF %uni</button>
+      </div>
+      <div class="chart-div" id="chartUni">
+        <div class="empty-state">Cargá el archivo Excel para comenzar</div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// CONSTANTES
+// ══════════════════════════════════════════════════════════════
+// Columna base de cada región (1-indexada, igual que el Python)
+const REGION_BASE = {
+  'TOTAL NACIONAL': 23,
+  'NOA':            35,
+  'LITORAL':        47,
+  'CUYO':           59,
+  'CÓRDOBA':        71,
+  'BS AS':          83,
+  'PATAGONIA':      95,
+};
+
+// Las 12 métricas por región, en el mismo orden que el Python
+const METRICAS = [
+  'CRF_IMP',        // +0
+  'CRF_PCT_PG_IMP', // +1
+  'CRF_PCT_UN_IMP', // +2
+  'CRF_UNI',        // +3
+  'CRF_PCT_PG_UNI', // +4
+  'CRF_PCT_UN_UNI', // +5
+  'MDO_IMP',        // +6
+  'MDO_PCT_PG_IMP', // +7
+  'MDO_PCT_UN_IMP', // +8
+  'MDO_UNI',        // +9
+  'MDO_PCT_PG_UNI', // +10
+  'MDO_PCT_UN_UNI', // +11
+];
+
+const COLOR_BULNEZ  = '#ff0000';
+const COLOR_CRF     = '#4f81bd';
+const COLOR_VST_CRF = '#7f7f7f';
+const COLOR_VST_MDO = '#dce6f2';
+
+// ══════════════════════════════════════════════════════════════
+// ESTADO
+// ══════════════════════════════════════════════════════════════
+let allData      = [];
+let prevRegiones = ['TOTAL NACIONAL'];
+
+// col: nombre de la propiedad en el objeto brand; asc: bool
+let sortImp = { col: 'crfPctImp', asc: true };
+let sortUni = { col: 'crfPctUni', asc: true };
+
+// ══════════════════════════════════════════════════════════════
+// CARGA DE ARCHIVO (vía selector de archivo)
+// ══════════════════════════════════════════════════════════════
+const BASE_TITLE = document.getElementById('SpanTituloGraficos').textContent;
+
+document.getElementById('fileInput').addEventListener('change', function () {
+  const file = this.files[0];
+  if (!file) return;
+  setStatus('Procesando...', false);
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      // Resetear título base antes de parsear (por si se carga un nuevo archivo)
+      document.getElementById('SpanTituloGraficos').textContent = BASE_TITLE;
+      parseWorkbook(wb);
+      setStatus('✓ ' + file.name, true);
+    } catch (err) {
+      setStatus('✗ Error al procesar: ' + err.message, false);
+    }
+  };
+  reader.onerror = () => setStatus('✗ Error al leer el archivo', false);
+  reader.readAsArrayBuffer(file);
+});
+
+function setStatus(msg, ok) {
+  const st = document.getElementById('fileStatus');
+  st.textContent = msg;
+  st.className = 'file-status' + (ok ? ' loaded' : '');
+}
+
+// ══════════════════════════════════════════════════════════════
+// PARSEO DEL EXCEL
+// ══════════════════════════════════════════════════════════════
+function parseWorkbook(wb) {
+  const ws   = wb.Sheets['Export'];
+  if (!ws) { setStatus('✗ No se encontró la hoja "Export"', false); return; }
+
+  // Leer A1 y concatenar al título
+  const a1 = ws['A1'] ? String(ws['A1'].v || ws['A1'].w || '').trim() : '';
+  if (a1) document.querySelector('.page-title').textContent += ' — ' + a1;
+
+  // sheet_to_json con header:1 devuelve cada fila como array 0-indexado
+  // Python usa header=2 → las filas 0,1,2 son encabezados, los datos empiezan en índice 3
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+  allData = [];
+
+  for (const row of rows.slice(3)) {
+    // Filtrar filas vacías (equivalente al dropna del Python)
+    if (!row[1] || !row[2] || !row[5]) continue;
+
+    const obj = {
+      PLANOGRAMA:      String(row[1]).trim(),
+      UN:              String(row[2]).trim(),
+      MARCA:           String(row[5]).trim(),
+      CATEGORIA:        String(row[6]   || '').trim(),
+      YTD_SH_IMP_2026:  parseFloat(row[107]) || 0,
+      YTD_DIF_SH_IMP:   parseFloat(row[108]) || 0,
+      YTD_SH_VOL_2026:  parseFloat(row[110]) || 0,
+      YTD_DIF_SH_VOL:   parseFloat(row[111]) || 0,
+    };
+
+    // Para cada región, leer las 12 métricas
+    // En Python: base + offset - 1  (base es 1-indexada)
+    // En JS (0-indexado): (base - 1) + offset
+    for (const [region, base] of Object.entries(REGION_BASE)) {
+      const start = base - 1; // índice 0-based del primer col de la región
+      METRICAS.forEach((metrica, offset) => {
+        obj[region + '|' + metrica] = parseFloat(row[start + offset]) || 0;
+      });
+    }
+
+    allData.push(obj);
+  }
+
+  if (allData.length === 0) {
+    setStatus('✗ No se encontraron datos en la hoja Export', false);
+    return;
+  }
+
+  populateRegionFilter();
+  populatePlanFilter();
+  resetChainedFilters(null);
+  renderCharts();
+}
+
+// ══════════════════════════════════════════════════════════════
+// FILTROS
+// ══════════════════════════════════════════════════════════════
+function getSelected(selId) {
+  return [...document.getElementById(selId).selectedOptions]
+    .map(o => o.value)
+    .filter(v => v !== ''); // '' = "— Seleccionar —", equivale a sin filtro
+}
+
+function populateRegionFilter() {
+  const sel = document.getElementById('regionSel');
+  sel.innerHTML = '';
+  for (const r of Object.keys(REGION_BASE)) {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = r;
+    if (r === 'TOTAL NACIONAL') opt.selected = true;
+    sel.appendChild(opt);
+  }
+  prevRegiones = ['TOTAL NACIONAL'];
+}
+
+function populatePlanFilter() {
+  const sel = document.getElementById('planSel');
+  sel.innerHTML = '';
+  addPlaceholder(sel);
+  const planes = [...new Set(allData.map(r => r.PLANOGRAMA))].sort();
+  for (const p of planes) {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = p;
+    sel.appendChild(opt);
+  }
+}
+
+// Reconstruye UN y Marca según el planograma (y opcionalmente UNs seleccionadas)
+function addPlaceholder(sel) {
+  const opt = document.createElement('option');
+  opt.value = '';
+  opt.textContent = '— Seleccionar —';
+  opt.selected = true;
+  sel.appendChild(opt);
+}
+
+function resetChainedFilters(plans) {
+  const unSel    = document.getElementById('unSel');
+  const marcaSel = document.getElementById('marcaSel');
+  unSel.innerHTML    = '';
+  marcaSel.innerHTML = '';
+  addPlaceholder(unSel);
+  addPlaceholder(marcaSel);
+  if (!plans || !plans.length) return;
+
+  const pg  = allData.filter(r => plans.includes(r.PLANOGRAMA));
+  const uns = [...new Set(pg.map(r => r.UN))].sort();
+  for (const u of uns) {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = u;
+    unSel.appendChild(opt);
+  }
+
+  const marcas = [...new Set(pg.map(r => r.MARCA))].sort();
+  for (const m of marcas) {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = m;
+    marcaSel.appendChild(opt);
+  }
+}
+
+function updateMarcaOptions() {
+  const plans = getSelected('planSel');
+  if (!plans.length) return;
+  const pg   = allData.filter(r => plans.includes(r.PLANOGRAMA));
+  const uns  = getSelected('unSel');
+  const base = uns.length ? pg.filter(r => uns.includes(r.UN)) : pg;
+  const marcas = [...new Set(base.map(r => r.MARCA))].sort();
+
+  const marcaSel = document.getElementById('marcaSel');
+  marcaSel.innerHTML = '';
+  addPlaceholder(marcaSel); // siempre resetea Marca a "— Seleccionar —"
+  for (const m of marcas) {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = m;
+    marcaSel.appendChild(opt);
+  }
+}
+
+// ── Exclusión TOTAL NACIONAL ──────────────────────────────────
+document.getElementById('regionSel').addEventListener('change', function () {
+  const regiones    = getSelected('regionSel');
+  const hasTotal    = regiones.includes('TOTAL NACIONAL');
+  const hasPartials = regiones.some(r => r !== 'TOTAL NACIONAL');
+
+  if (!regiones.length) {
+    // Si nada seleccionado, volver a TOTAL NACIONAL
+    [...this.options].forEach(o => { o.selected = o.value === 'TOTAL NACIONAL'; });
+    prevRegiones = ['TOTAL NACIONAL'];
+  } else if (hasTotal && hasPartials) {
+    // Conflicto: si TOTAL NACIONAL ya estaba → quitarlo; si es nuevo → dejar solo él
+    if (prevRegiones.includes('TOTAL NACIONAL')) {
+      [...this.options].forEach(o => { if (o.value === 'TOTAL NACIONAL') o.selected = false; });
+    } else {
+      [...this.options].forEach(o => { o.selected = o.value === 'TOTAL NACIONAL'; });
+    }
+  }
+  prevRegiones = getSelected('regionSel');
+  renderCharts();
+});
+
+// ── Cambio de planograma ───────────────────────────────────────
+document.getElementById('planSel').addEventListener('change', function () {
+  resetChainedFilters(getSelected('planSel'));
+  renderCharts();
+});
+
+// ── Cambio de UN ──────────────────────────────────────────────
+document.getElementById('unSel').addEventListener('change', function () {
+  updateMarcaOptions();
+  renderCharts();
+});
+
+// ── Cambio de Marca / Ver % / Ver IP / Agrupar por ───────────
+document.getElementById('marcaSel').addEventListener('change', renderCharts);
+document.getElementById('groupBySel').addEventListener('change', renderCharts);
+
+// Ver %, Ver IP y Ver Share son mutuamente excluyentes
+document.getElementById('showPctChk').addEventListener('change', function () {
+  if (this.checked) {
+    document.getElementById('showIPChk').checked    = false;
+    document.getElementById('showShareChk').checked = false;
+  }
+  renderCharts();
+});
+document.getElementById('showIPChk').addEventListener('change', function () {
+  if (this.checked) {
+    document.getElementById('showPctChk').checked   = false;
+    document.getElementById('showShareChk').checked = false;
+  }
+  renderCharts();
+});
+document.getElementById('showShareChk').addEventListener('change', function () {
+  if (this.checked) {
+    document.getElementById('showPctChk').checked = false;
+    document.getElementById('showIPChk').checked  = false;
+  }
+  renderCharts();
+});
+
+// ══════════════════════════════════════════════════════════════
+// CÁLCULO
+// groupBy: 'MARCA' (default), 'PLANOGRAMA' o 'UN'
+// ══════════════════════════════════════════════════════════════
+function calcBrands(plans, uns, marcas, regiones, groupBy) {
+  groupBy = groupBy || 'MARCA';
+
+  // Sin planograma seleccionado solo bloqueamos en modo MARCA (demasiadas marcas)
+  if (groupBy === 'MARCA' && (!plans || !plans.length)) return [];
+
+  // ── Filtrar datos base ────────────────────────────────────────
+  let base = allData;
+  if (plans && plans.length)   base = base.filter(r => plans.includes(r.PLANOGRAMA));
+  if (uns   && uns.length)     base = base.filter(r => uns.includes(r.UN));
+  if (marcas && marcas.length) base = base.filter(r => marcas.includes(r.MARCA));
+  if (!base.length) return [];
+
+  const nPlans = plans ? plans.length : 0;
+  const nUns   = uns   ? uns.length   : 0;
+  const nReg   = regiones ? regiones.length : 1;
+
+  // ── Determinar si usar PCT pre-calculados o recalcular ───────
+  // Solo en modo MARCA con plan único + región única + 0/1 UNs
+  let usePreCalc = false, pctSuffix = 'PCT_PG';
+  if (groupBy === 'MARCA' && nPlans === 1 && nReg === 1) {
+    if (nUns === 0)      { usePreCalc = true; pctSuffix = 'PCT_PG'; }
+    else if (nUns === 1) { usePreCalc = true; pctSuffix = 'PCT_UN'; }
+  }
+
+  // ── Lookup CATEGORIA → share (primera ocurrencia en base filtrada) ──
+  const catShareMap = {};
+  for (const row of base) {
+    if (row.CATEGORIA && !(row.CATEGORIA in catShareMap)) {
+      catShareMap[row.CATEGORIA] = {
+        shareImp2026: row.YTD_SH_IMP_2026  || 0,
+        shareDifImp:  row.YTD_DIF_SH_IMP   || 0,
+        shareVol2026: row.YTD_SH_VOL_2026  || 0,
+        shareDifVol:  row.YTD_DIF_SH_VOL   || 0,
+      };
+    }
+  }
+
+  // ── Agrupar por la dimensión elegida ─────────────────────────
+  const groupMap = {};
+  for (const row of base) {
+    const key = row[groupBy];
+    if (!groupMap[key]) groupMap[key] = {
+      crfImp: 0, crfUni: 0, mdoImp: 0, mdoUni: 0,
+      crfPctImp: 0, crfPctUni: 0, mdoPctImp: 0, mdoPctUni: 0,
+      categoria: row.CATEGORIA,   // primera fila determina la categoría del grupo
+    };
+    const b = groupMap[key];
+    for (const reg of regiones) {
+      b.crfImp += row[reg + '|CRF_IMP'] || 0;
+      b.crfUni += row[reg + '|CRF_UNI'] || 0;
+      b.mdoImp += row[reg + '|MDO_IMP'] || 0;
+      b.mdoUni += row[reg + '|MDO_UNI'] || 0;
+      if (usePreCalc) {
+        b.crfPctImp += row[reg + '|CRF_' + pctSuffix + '_IMP'] || 0;
+        b.crfPctUni += row[reg + '|CRF_' + pctSuffix + '_UNI'] || 0;
+        b.mdoPctImp += row[reg + '|MDO_' + pctSuffix + '_IMP'] || 0;
+        b.mdoPctUni += row[reg + '|MDO_' + pctSuffix + '_UNI'] || 0;
+      }
+    }
+  }
+
+  let items = Object.entries(groupMap).map(([key, b]) => ({ marca: key, ...b }));
+
+  if (!usePreCalc) {
+    // Denominador: para MARCA con nUns>1 → planograma completo; resto → base filtrada
+    let denomBase = base;
+    if (groupBy === 'MARCA' && nUns > 1 && nPlans > 0) {
+      denomBase = allData.filter(r => plans.includes(r.PLANOGRAMA));
+      if (marcas && marcas.length) denomBase = denomBase.filter(r => marcas.includes(r.MARCA));
+    }
+    let denCrfImp = 0, denCrfUni = 0, denMdoImp = 0, denMdoUni = 0;
+    for (const row of denomBase) {
+      for (const reg of regiones) {
+        denCrfImp += row[reg + '|CRF_IMP'] || 0;
+        denCrfUni += row[reg + '|CRF_UNI'] || 0;
+        denMdoImp += row[reg + '|MDO_IMP'] || 0;
+        denMdoUni += row[reg + '|MDO_UNI'] || 0;
+      }
+    }
+    items = items.map(b => ({
+      ...b,
+      crfPctImp: denCrfImp > 0 ? b.crfImp / denCrfImp : 0,
+      crfPctUni: denCrfUni > 0 ? b.crfUni / denCrfUni : 0,
+      mdoPctImp: denMdoImp > 0 ? b.mdoImp / denMdoImp : 0,
+      mdoPctUni: denMdoUni > 0 ? b.mdoUni / denMdoUni : 0,
+    }));
+  }
+
+  // ── Índice de precio + share diferencial por item ───────────
+  return items.map(b => {
+    const catShare = catShareMap[b.categoria] || { shareImp2026: 0, shareDifImp: 0, shareVol2026: 0, shareDifVol: 0 };
+    return {
+      ...b,
+      priceIdxCrf:  b.crfUni > 0 ? b.crfImp / b.crfUni : 0,
+      priceIdxMdo:  b.mdoUni > 0 ? b.mdoImp / b.mdoUni : 0,
+      shareImp2026: catShare.shareImp2026,
+      shareDifImp:  catShare.shareDifImp,
+      shareVol2026: catShare.shareVol2026,
+      shareDifVol:  catShare.shareDifVol,
+    };
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// RENDERIZADO DE GRÁFICOS
+// ══════════════════════════════════════════════════════════════
+function fmt(v) {
+  // Suprimir 0.00% para evitar que tape las marcas en el centro
+  return v >= 0.00005 ? (v * 100).toFixed(1) + '%' : '';
+  // return v >= 0.00005 ? (v * 100).toFixed(2) + '%' : '';
+}
+
+function renderMirrorChart(divId, brands, colMdo, colCrf, labelMdo, labelCrf, showPct, groupBy, showIP, showShare, shareCol) {
+  const el = document.getElementById(divId);
+  groupBy = groupBy || 'MARCA';
+
+  if (!brands.length) {
+    const msg = groupBy === 'MARCA' ? 'Seleccioná un planograma' : 'Sin datos para mostrar';
+    el.innerHTML = '<div class="empty-state">' + msg + '</div>';
+    return;
+  }
+
+  // Limpiar estado previo de Plotly si existe
+  if (el._fullLayout) Plotly.purge(el);
+  el.innerHTML = '';
+
+  // Altura basada en cantidad de items (sin overhead de padding extra)
+  const h = brands.length * 28 + 24;
+  el.style.height = h + 'px';
+
+  const marca    = brands.map(b => b.marca);
+  const mdo      = brands.map(b => b[colMdo]);
+  const crf      = brands.map(b => b[colCrf]);
+  // En modo MARCA: colores especiales por marca; en otros modos: color uniforme CRF
+  // CRF siempre en azul Carrefour
+  const colorCrf = marca.map(() => COLOR_CRF);
+
+  // Formato índice de precio: sin decimales, con "," separador de miles
+  const fmtIP    = idx => '$' + Math.round(idx).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  // Formato share: "12.34% | +0.53%"  (valor 2026 | diferencia)
+  const fmtShareFull = (val2026, dif) => {
+    const v26  = (val2026 * 100).toFixed(2) + '%';
+    const sign = dif >= 0 ? '+' : '';
+    const vDif = sign + (dif * 100).toFixed(2) + '%';
+    return v26 + '  |  ' + vDif;
+  };
+
+  // Mapa shareCol → col 2026 correspondiente
+  const share2026Col = shareCol === 'shareDifImp' ? 'shareImp2026' : 'shareVol2026';
+
+  // ── Texto para barra MDO (izquierda) ─────────────────────────
+  // Ver Share: sin texto en MDO (el share se muestra solo en CRF)
+  const barTextMdo = (vals, idxArr) => {
+    if (showShare) return vals.map(() => '');
+    if (!showPct && !showIP) return undefined;
+    return vals.map((v, i) => showIP ? (idxArr[i] > 0 ? fmtIP(idxArr[i]) : '') : fmt(v));
+  };
+
+  // ── Texto para barra CRF (derecha) ───────────────────────────
+  const barTextCrf = (vals, idxArr) => {
+    if (!showPct && !showIP && !showShare) return undefined;
+    return vals.map((v, i) => {
+      if (showShare) return fmtShareFull(brands[i][share2026Col] || 0, brands[i][shareCol] || 0);
+      if (showIP)    return idxArr[i] > 0 ? fmtIP(idxArr[i]) : '';
+      return fmt(v);
+    });
+  };
+
+  const traces = [
+    // ── MDO izquierda (valores negativos para espejo) ──
+    {
+      type: 'bar', orientation: 'h',
+      y: marca, x: mdo.map(v => -v),
+      xaxis: 'x', yaxis: 'y',
+      marker: { color: COLOR_VST_MDO },
+      customdata: mdo,
+      hovertemplate: labelMdo + ': %{customdata:.2%}<extra></extra>',
+      text:         barTextMdo(mdo, brands.map(b => b.priceIdxMdo)),
+      textposition: 'outside',
+      showlegend: false,
+    },
+    // ── Nombres de marca en el centro ──
+    {
+      type: 'scatter', mode: 'text',
+      y: marca, x: marca.map(() => 0),
+      xaxis: 'x2', yaxis: 'y',
+      text: marca,
+      showlegend: false,
+      hovertemplate: '%{text}<extra></extra>',
+    },
+    // ── CRF derecha ──
+    {
+      type: 'bar', orientation: 'h',
+      y: marca, x: crf,
+      xaxis: 'x3', yaxis: 'y',
+      marker: { color: colorCrf },
+      customdata: crf,
+      hovertemplate: labelCrf + ': %{customdata:.2%}<extra></extra>',
+      text:         barTextCrf(crf, brands.map(b => b.priceIdxCrf)),
+      textposition: 'outside',
+      showlegend: false,
+    },
+  ];
+
+  const layout = {
+    height: h,
+    barmode: 'overlay',
+    plot_bgcolor:  'rgba(0,0,0,0)',
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    font:   { family: 'Montserrat', size: 11, color: '#333' },
+    margin: { l: 20, r: 40, t: 2, b: 2 },
+    dragmode:   false,
+    showlegend: false,
+    // Tres ejes X compartiendo el mismo eje Y
+    xaxis:  { domain: [0,    0.34  ], range: [-1.45, 0], tickvals: [-1, 0], ticktext: ['100%', '0%'], anchor: 'y', zeroline: false, showgrid: false },
+    xaxis2: { domain: [0.35, 0.65 ],  visible: false, anchor: 'y' },
+    xaxis3: { domain: [0.66, 1.0  ],  range: [0, 1.45],  tickvals: [0, 1],  ticktext: ['0%', '100%'], anchor: 'y', zeroline: false, showgrid: false },
+    yaxis:  { showticklabels: false, categoryorder: 'trace', anchor: 'x',
+              range: [-0.5, brands.length - 0.5] },
+  };
+
+  const config = {
+    displayModeBar: false,
+    scrollZoom:    false,
+    doubleClick:   false,
+    staticPlot:    false,
+    responsive:    false,
+  };
+
+  Plotly.newPlot(el, traces, layout, config);
+}
+
+function renderCharts() {
+  const plans   = getSelected('planSel');
+  const regs    = getSelected('regionSel');
+  const uns     = getSelected('unSel');
+  const marcas  = getSelected('marcaSel');
+  const showPct   = document.getElementById('showPctChk').checked;
+  const showIP    = document.getElementById('showIPChk').checked;
+  const showShare = document.getElementById('showShareChk').checked;
+  const groupBy   = document.getElementById('groupBySel').value;
+
+  const regiones = regs.length ? regs : ['TOTAL NACIONAL'];
+
+  // Calcular una sola vez, luego ordenar diferente para cada gráfico
+  const allBrands = calcBrands(plans, uns, marcas, regiones, groupBy);
+
+  const sortFn = (brands, state) =>
+    [...brands].sort((a, b) => state.asc ? a[state.col] - b[state.col] : b[state.col] - a[state.col]);
+
+  renderMirrorChart('chartImp', sortFn(allBrands, sortImp), 'mdoPctImp', 'crfPctImp', 'MDO %$',   'CRF %$',   showPct, groupBy, showIP, showShare, 'shareDifImp');
+  renderMirrorChart('chartUni', sortFn(allBrands, sortUni), 'mdoPctUni', 'crfPctUni', 'MDO %uni', 'CRF %uni', showPct, groupBy, showIP, showShare, 'shareDifVol');
+}
+
+// ══════════════════════════════════════════════════════════════
+// BOTONES DE ORDEN
+// ══════════════════════════════════════════════════════════════
+function setupSortButtons(btnMdoId, btnCrfId, sortState, colMdo, colCrf) {
+  const btnMdo = document.getElementById(btnMdoId);
+  const btnCrf = document.getElementById(btnCrfId);
+
+  function activate(mdoActive) {
+    btnMdo.classList.toggle('inactive', !mdoActive);
+    btnCrf.classList.toggle('inactive',  mdoActive);
+  }
+
+  btnMdo.addEventListener('click', () => {
+    if (sortState.col === colMdo) sortState.asc = !sortState.asc;
+    else sortState.col = colMdo;
+    activate(true);
+    renderCharts();
+  });
+
+  btnCrf.addEventListener('click', () => {
+    if (sortState.col === colCrf) sortState.asc = !sortState.asc;
+    else sortState.col = colCrf;
+    activate(false);
+    renderCharts();
+  });
+}
+
+setupSortButtons('btnImpMdo', 'btnImpCrf', sortImp, 'mdoPctImp', 'crfPctImp');
+setupSortButtons('btnUniMdo', 'btnUniCrf', sortUni, 'mdoPctUni', 'crfPctUni');
+</script>
+</body>
+</html>

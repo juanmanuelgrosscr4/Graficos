@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analytics — Carrefour</title>
+  <link rel="icon" href="favicon.ico" type="image/x-icon">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Montserrat', sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── HEADER ── */
+    .header {
+      background: #fff;
+      border-bottom: 3px solid #4f81bd;
+      padding: 20px 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .header-logo {
+      width: 42px;
+      height: 42px;
+      background: #4f81bd;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+    .header-text { display: flex; flex-direction: column; gap: 2px; }
+    .header-title {
+      font-size: 17px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #222;
+    }
+    .header-sub {
+      font-size: 11px;
+      color: #999;
+      font-weight: 600;
+      letter-spacing: .5px;
+      text-transform: uppercase;
+    }
+
+    /* ── MAIN ── */
+    .main {
+      flex: 1;
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 4px;
+    }
+
+    /* ── CARDS GRID ── */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .tool-card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.07);
+      padding: 24px 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+      border: 2px solid transparent;
+      transition: border-color .15s, box-shadow .15s, transform .1s;
+      position: relative;
+      overflow: hidden;
+    }
+    .tool-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 4px;
+      background: var(--accent, #4f81bd);
+    }
+    .tool-card:hover {
+      border-color: var(--accent, #4f81bd);
+      box-shadow: 0 6px 20px rgba(79,129,189,.18);
+      transform: translateY(-2px);
+    }
+
+    .card-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: var(--icon-bg, #e8f0f8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #222;
+      letter-spacing: .3px;
+    }
+    .card-desc {
+      font-size: 12px;
+      color: #777;
+      line-height: 1.5;
+    }
+    .card-arrow {
+      margin-top: auto;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent, #4f81bd);
+      letter-spacing: .5px;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* ── FOOTER ── */
+    .footer {
+      padding: 16px 40px;
+      font-size: 11px;
+      color: #bbb;
+      border-top: 1px solid #e8e8e8;
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-logo">📊</div>
+  <div class="header-text">
+    <div class="header-title">Analytics</div>
+    <div class="header-sub">Carrefour Argentina</div>
+  </div>
+</header>
+
+<main class="main">
+  <div class="section-label">Herramientas disponibles</div>
+  <div class="cards-grid">
+
+    <!-- Participación de marcas -->
+    <a class="tool-card" href="Graficos/Participacion_Barras.html" style="--accent:#4f81bd; --icon-bg:#e8f0f8;">
+      <div class="card-icon">📊</div>
+      <div class="card-title">Participación de Marcas</div>
+      <div class="card-desc">Gráfico de barras espejo con participación de mercado por marca en importe y unidades.</div>
+      <div class="card-arrow">Abrir &rarr;</div>
+    </a>
+
+    <!-- Pirámide de segmentación -->
+    <a class="tool-card" href="Graficos/Piramide_Segmentacion.html" style="--accent:#5b9bd5; --icon-bg:#e4f0fa;">
+      <div class="card-icon">🔺</div>
+      <div class="card-title">Pirámide de Segmentación</div>
+      <div class="card-desc">Pirámides SVG de segmentación de precios: CRF vs MDO por rango de PVP.</div>
+      <div class="card-arrow">Abrir &rarr;</div>
+    </a>
+
+  </div>
+</main>
+
+<footer class="footer">
+  Analytics · Carrefour Argentina
+</footer>
+
+</body>
+</html>

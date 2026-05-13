@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pirámide de Segmentación</title>
+  <link rel="icon" href="../favicon.ico" type="image/x-icon">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Montserrat', sans-serif;
+      background: #f0f2f5;
+      color: #333;
+      min-height: 100vh;
+    }
+
+    /* ── HEADER ── */
+    .page-header {
+      background: #fff;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .page-title {
+      font-size: 16px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #333;
+      flex: 1;
+    }
+    .file-status { font-size: 11px; color: #888; white-space: nowrap; }
+    .file-status.loaded { color: #4f81bd; font-weight: 600; }
+    .upload-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      background: #4f81bd;
+      color: #fff;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background .15s;
+      border: none;
+    }
+    .upload-btn:hover { background: #3a6a9e; }
+
+    /* ── FILTERS ── */
+    .filters-bar {
+      background: #fff;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 10px 24px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      flex: 1;
+      min-width: 140px;
+    }
+    .filter-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+    select {
+      font-family: inherit;
+      font-size: 12px;
+      border: 1px solid #d0d0d0;
+      border-radius: 5px;
+      padding: 5px 8px;
+      background: #fafafa;
+      color: #333;
+      outline: none;
+      transition: border-color .15s;
+      cursor: pointer;
+    }
+    select:hover  { border-color: #4f81bd; }
+    select:focus  { border-color: #4f81bd; box-shadow: 0 0 0 2px rgba(79,129,189,.15); }
+    select[multiple] { resize: none; }
+
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      color: #555;
+      align-self: flex-end;
+      margin-bottom: 6px;
+    }
+    .checkbox-label input[type=checkbox] { cursor: pointer; accent-color: #4f81bd; width: 14px; height: 14px; }
+
+    /* ── MAIN ── */
+    .main { padding: 20px 24px; }
+
+    .pyramids-row {
+      display: flex;
+      gap: 0;
+      align-items: stretch;
+    }
+    .pyramid-card {
+      flex: 1;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+      padding: 16px 8px 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 0;
+    }
+
+    /* Columna central con nombres de segmento */
+    .seg-names-col {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      align-items: center;
+      width: 110px;
+      min-width: 110px;
+      padding-top: 0;
+    }
+    .seg-names-title {
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: #4f81bd;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      text-align: center;
+    }
+    .seg-name {
+      height: 100px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: #444;
+      text-align: center;
+      line-height: 1.3;
+    }
+
+    svg.pyramid { width: 100%; height: auto; max-height: 430px; overflow: visible; }
+
+    .trap { transition: opacity .15s; cursor: default; }
+    .trap:hover { opacity: .80; }
+
+    /* ── SEGMENT TABLE ── */
+    .seg-card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+      padding: 16px 20px;
+    }
+    .seg-card-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: #555;
+      margin-bottom: 12px;
+    }
+    .seg-tabla {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .seg-tabla th {
+      padding: 7px 14px;
+      background: #f0f2f5;
+      font-weight: 700;
+      color: #555;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      border-bottom: 2px solid #e0e0e0;
+    }
+    .seg-tabla td {
+      padding: 6px 14px;
+      border-bottom: 1px solid #f0f0f0;
+      color: #333;
+    }
+    .seg-tabla tr:last-child td { border-bottom: none; }
+    .seg-tabla tr:hover td { background: #f8f9fb; }
+    .seg-tabla td:last-child { text-align: right; color: #4f81bd; font-weight: 600; }
+    .seg-tabla th:last-child { text-align: right; }
+
+    /* ── TOOLTIP ── */
+    #tooltip {
+      position: fixed;
+      background: rgba(30,30,30,.88);
+      color: #fff;
+      padding: 7px 11px;
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 1.5;
+      pointer-events: none;
+      display: none;
+      z-index: 9999;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+
+<div id="tooltip"></div>
+
+<!-- HEADER -->
+<header class="page-header">
+  <span id="pageTitle" class="page-title">Análisis de Categorías - Pirámide de Segmentación</span>
+  <label class="upload-btn">
+    <input type="file" id="fileInput" accept=".xlsx" style="display:none">
+    &#128194; Cargar Excel
+  </label>
+  <span class="file-status" id="fileStatus">Sin archivo cargado</span>
+</header>
+
+<!-- FILTERS -->
+<div class="filters-bar">
+  <div class="filter-group">
+    <span class="filter-label">Región</span>
+    <select id="regionSel" multiple></select>
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">Planograma</span>
+    <select id="planSel" multiple></select>
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">UN</span>
+    <select id="unSel" multiple></select>
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">Marca</span>
+    <select id="marcaSel" multiple></select>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:6px; align-self:flex-end; margin-bottom:6px;">
+    <label class="checkbox-label" style="margin-bottom:0;">
+      <input type="checkbox" id="showUniChk"> Ver % uni
+    </label>
+    <label class="checkbox-label" style="margin-bottom:0; width: 100%;">
+      <input type="checkbox" id="showPctChk"> Ver %
+    </label>
+  </div>
+  <!-- Segunda fila: selector de segmento -->
+  <div style="width:100%; border-top:1px solid #f0f0f0; padding-top:8px; margin-top:2px; display:flex; align-items:center; gap:10px;">
+    <span class="filter-label" style="white-space:nowrap">Ver marcas por segmento</span>
+    <select id="segSel" style="max-width:200px; flex:none;">
+      <option value="">— Seleccionar —</option>
+      <option value="BAJO">Bajo</option>
+      <option value="MEDIO">Medio</option>
+      <option value="ALTO">Alto</option>
+      <option value="ALTA GAMA">Alta Gama</option>
+    </select>
+  </div>
+</div>
+
+<!-- PYRAMIDS -->
+<main class="main">
+  <div class="pyramids-row">
+    <div class="pyramid-card">
+      <svg id="svgPct"  class="pyramid" viewBox="-255 -45 510 465"></svg>
+    </div>
+    <div class="seg-names-col">
+      <div class="seg-names-title">Rango PVP</div>
+      <div class="seg-name">BAJO</div>
+      <div class="seg-name">MEDIO</div>
+      <div class="seg-name">ALTO</div>
+      <div class="seg-name">ALTA GAMA</div>
+    </div>
+    <div class="pyramid-card">
+      <svg id="svgRefs" class="pyramid" viewBox="-255 -45 510 465"></svg>
+    </div>
+  </div>
+</main>
+
+<!-- TABLAS DE MARCAS POR SEGMENTO -->
+<section id="segPanel" style="display:none" class="main">
+  <div style="display:flex; gap:16px; align-items:flex-start;">
+    <!-- MDO -->
+    <div class="seg-card" style="flex:1; min-width:0;">
+      <div class="seg-card-title">MDO — Segmento: <span id="segNombreMdo"></span></div>
+      <table class="seg-tabla">
+        <thead><tr><th>Marca</th><th>Precio Promedio</th></tr></thead>
+        <tbody id="segTablaMdo"></tbody>
+      </table>
+    </div>
+    <!-- CRF -->
+    <div class="seg-card" style="flex:1; min-width:0;">
+      <div class="seg-card-title" style="color:#4f81bd">CRF — Segmento: <span id="segNombreCrf"></span></div>
+      <table class="seg-tabla">
+        <thead><tr><th>Marca</th><th>Precio Promedio</th></tr></thead>
+        <tbody id="segTablaCrf"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// CONSTANTES
+// ══════════════════════════════════════════════════════════════
+const REGION_BASE = {
+  'TOTAL NACIONAL': 23, 'NOA': 35, 'LITORAL': 47,
+  'CUYO': 59, 'CÓRDOBA': 71, 'BS AS': 83, 'PATAGONIA': 95,
+};
+const METRICAS = [
+  'CRF_IMP','CRF_PCT_PG_IMP','CRF_PCT_UN_IMP',
+  'CRF_UNI','CRF_PCT_PG_UNI','CRF_PCT_UN_UNI',
+  'MDO_IMP','MDO_PCT_PG_IMP','MDO_PCT_UN_IMP',
+  'MDO_UNI','MDO_PCT_PG_UNI','MDO_PCT_UN_UNI',
+];
+const SEGMENTOS = ['BAJO','MEDIO','ALTO','ALTA GAMA'];
+
+// Geometría fija — más ancha arriba (BAJO), más puntiaguda abajo (ALTA GAMA)
+const SEG_X = { 'BAJO':[130,93], 'MEDIO':[93,57], 'ALTO':[57,25], 'ALTA GAMA':[25,4] };
+const SEG_Y = { 'BAJO':[0,100], 'MEDIO':[100,200], 'ALTO':[200,300], 'ALTA GAMA':[300,400] };
+
+const X_OUT = 145;
+const C_MDO = '#dce6f2';
+const C_CRF = '#4f81bd';
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+// ══════════════════════════════════════════════════════════════
+// ESTADO
+// ══════════════════════════════════════════════════════════════
+let allData = [];
+let prevRegiones = ['TOTAL NACIONAL'];
+
+// ══════════════════════════════════════════════════════════════
+// CARGA DE ARCHIVO (vía selector de archivo)
+// ══════════════════════════════════════════════════════════════
+const BASE_TITLE = document.getElementById('pageTitle').textContent;
+
+document.getElementById('fileInput').addEventListener('change', function () {
+  const file = this.files[0];
+  if (!file) return;
+  const st = document.getElementById('fileStatus');
+  st.textContent = 'Procesando...';
+  st.className = 'file-status';
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      document.getElementById('pageTitle').textContent = BASE_TITLE;
+      parseWorkbook(wb);
+      st.textContent = '\u2713 ' + file.name;
+      st.className = 'file-status loaded';
+    } catch (err) {
+      st.textContent = '\u2717 Error al procesar: ' + err.message;
+      st.className = 'file-status';
+      st.style.color = '#c00';
+    }
+  };
+  reader.onerror = () => {
+    st.textContent = '\u2717 Error al leer el archivo';
+    st.style.color = '#c00';
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+// ══════════════════════════════════════════════════════════════
+// PARSEO DEL WORKBOOK
+// ══════════════════════════════════════════════════════════════
+function parseWorkbook(wb) {
+  const ws = wb.Sheets['Export'];
+
+  // Leer A1 y concatenar al título
+  const a1 = ws && ws['A1'] ? String(ws['A1'].v || ws['A1'].w || '').trim() : '';
+  if (a1) document.querySelector('.page-title').textContent += ' — ' + a1;
+
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  allData = [];
+  for (const row of rows.slice(3)) {
+    if (!row[1] || !row[2] || !row[5]) continue;
+    const obj = {
+      PLANOGRAMA: String(row[1]).trim(),
+      UN:         String(row[2]).trim(),
+      MARCA:      String(row[5]).trim(),
+      RANGO_PG:   String(row[20] || '').trim().toUpperCase(),
+      RANGO_UN:   String(row[21] || '').trim().toUpperCase(),
+      PRECIO_PG:  parseFloat(String(row[18] ?? '').replace(/[$,\s]/g, '')) || 0,   // col S: precio promedio Planograma+Marca
+      PRECIO_UN:  parseFloat(String(row[19] ?? '').replace(/[$,\s]/g, '')) || 0,   // col T: precio promedio UN+Marca
+    };
+    for (const [region, base] of Object.entries(REGION_BASE)) {
+      const idx = base - 1;
+      METRICAS.forEach((m, i) => { obj[region + '|' + m] = +row[idx + i] || 0; });
+    }
+    allData.push(obj);
+  }
+  initFilters();
+  update();
+}
+
+// ══════════════════════════════════════════════════════════════
+// FILTROS
+// ══════════════════════════════════════════════════════════════
+function initFilters() {
+  // Región
+  const rSel = document.getElementById('regionSel');
+  rSel.innerHTML = '';
+  rSel.size = Object.keys(REGION_BASE).length;
+  for (const r of Object.keys(REGION_BASE)) {
+    const o = document.createElement('option');
+    o.value = o.textContent = r;
+    if (r === 'TOTAL NACIONAL') o.selected = true;
+    rSel.appendChild(o);
+  }
+  rSel.addEventListener('change', handleRegionChange);
+
+  // Planograma (múltiple)
+  const pSel = document.getElementById('planSel');
+  pSel.innerHTML = '';
+  pSel.appendChild(new Option('— Seleccionar —', ''));
+  const planList = [...new Set(allData.map(r => r.PLANOGRAMA))].sort();
+  pSel.size = Math.min(planList.length + 1, 6);
+  planList.forEach(p => pSel.appendChild(new Option(p, p)));
+  pSel.addEventListener('change', () => { rebuildUN(); rebuildMarca(); update(); });
+  rebuildUN();
+  rebuildMarca();
+
+  document.getElementById('unSel').addEventListener('change', () => { rebuildMarca(); update(); });
+  document.getElementById('marcaSel').addEventListener('change', update);
+  document.getElementById('segSel').addEventListener('change', renderSegTable);
+  document.getElementById('showPctChk').addEventListener('change', update);
+  document.getElementById('showUniChk').addEventListener('change', update);
+}
+
+function handleRegionChange() {
+  const sel = document.getElementById('regionSel');
+  const selected = Array.from(sel.selectedOptions).map(o => o.value);
+  if (!selected.length) {
+    for (const o of sel.options) o.selected = (o.value === 'TOTAL NACIONAL');
+    prevRegiones = ['TOTAL NACIONAL'];
+    update(); return;
+  }
+  const hasTotal    = selected.includes('TOTAL NACIONAL');
+  const hasParcials = selected.some(r => r !== 'TOTAL NACIONAL');
+  if (hasTotal && hasParcials) {
+    if (prevRegiones.includes('TOTAL NACIONAL')) {
+      for (const o of sel.options) o.selected = (o.value !== 'TOTAL NACIONAL' && selected.includes(o.value));
+      prevRegiones = selected.filter(r => r !== 'TOTAL NACIONAL');
+    } else {
+      for (const o of sel.options) o.selected = (o.value === 'TOTAL NACIONAL');
+      prevRegiones = ['TOTAL NACIONAL'];
+    }
+  } else {
+    prevRegiones = [...selected];
+  }
+  update();
+}
+
+function rebuildUN() {
+  const plans = getSelected('planSel');
+  const sel   = document.getElementById('unSel');
+  sel.innerHTML = '';
+  sel.appendChild(new Option('— Seleccionar —', ''));
+  const source = plans.length > 0 ? allData.filter(r => plans.includes(r.PLANOGRAMA)) : allData;
+  const uns = [...new Set(source.map(r => r.UN))].sort();
+  sel.size = Math.min(uns.length + 1, 8);
+  uns.forEach(u => sel.appendChild(new Option(u, u)));
+}
+
+function rebuildMarca() {
+  const plans = getSelected('planSel');
+  const uns   = getSelected('unSel');
+  const sel   = document.getElementById('marcaSel');
+  sel.innerHTML = '';
+  sel.appendChild(new Option('— Seleccionar —', ''));
+  const source = plans.length > 0 ? allData.filter(r => plans.includes(r.PLANOGRAMA)) : allData;
+  let base = uns.length ? source.filter(r => uns.includes(r.UN)) : source;
+  const marcas = [...new Set(base.map(r => r.MARCA))].sort();
+  sel.size = Math.min(marcas.length + 1, 8);
+  marcas.forEach(m => sel.appendChild(new Option(m, m)));
+}
+
+// Filtra el valor vacío "— Seleccionar —"
+const getSelected = id => Array.from(document.getElementById(id).selectedOptions)
+  .map(o => o.value).filter(v => v !== '');
+
+// ══════════════════════════════════════════════════════════════
+// CÁLCULOS
+// ══════════════════════════════════════════════════════════════
+function sumReg(rows, col, regiones) {
+  let t = 0;
+  for (const r of regiones) for (const row of rows) t += (row[r + '|' + col] || 0);
+  return t;
+}
+
+// Devuelve por segmento: { seg, refs, refsPct, crfRefs, mdoRefs, crf, mdo }
+// useUni: true → usa métricas UNI en lugar de IMP
+// plans: array de planogramas seleccionados ([] = sin filtro)
+function calcPct(plans, uns, marcas, regiones, useUni) {
+  const met    = useUni ? 'UNI' : 'IMP';
+  const nPlans = plans.length;
+  const nUns   = uns.length;
+  const pg     = nPlans > 0 ? allData.filter(r => plans.includes(r.PLANOGRAMA)) : allData;
+  let rangoCol, base, recalc, useUN;
+
+  if (nPlans === 0) {
+    // Sin PG: todo el catálogo, siempre recalc
+    rangoCol = 'RANGO_PG'; base = nUns > 0 ? pg.filter(r => uns.includes(r.UN)) : pg;
+    recalc = true; useUN = false;
+  } else if (nPlans === 1 && nUns === 0) {
+    // 1 PG sin UN: usa % pre-calculados de PG
+    rangoCol = 'RANGO_PG'; base = pg; recalc = false; useUN = false;
+  } else if (nPlans === 1 && nUns === 1) {
+    // 1 PG + 1 UN: usa % pre-calculados de UN
+    rangoCol = 'RANGO_UN'; base = pg.filter(r => uns.includes(r.UN)); recalc = false; useUN = true;
+  } else if (nUns > 0) {
+    // Múltiples PGs con UNs, o 1 PG con múltiples UNs: recalc a nivel UN
+    rangoCol = 'RANGO_UN'; base = pg.filter(r => uns.includes(r.UN)); recalc = true; useUN = false;
+  } else {
+    // Múltiples PGs sin UN: recalc a nivel PG
+    rangoCol = 'RANGO_PG'; base = pg; recalc = true; useUN = false;
+  }
+
+  // filtered primero, para que sea el denominador (selección = nuevo 100%)
+  const filtered  = marcas.length ? base.filter(r => marcas.includes(r.MARCA)) : base;
+  const denom     = filtered;   // la selección activa siempre es el 100%
+  const totalRefs = filtered.length;
+  const denCRF    = sumReg(denom, 'CRF_' + met, regiones);
+  const denMDO    = sumReg(denom, 'MDO_' + met, regiones);
+
+  // Columna de precio según nivel de segmentación
+  const precioCol = rangoCol === 'RANGO_PG' ? 'PRECIO_PG' : 'PRECIO_UN';
+
+  return SEGMENTOS.map(seg => {
+    const segRows = filtered.filter(r => r[rangoCol] === seg);
+    const refs    = segRows.length;
+    const refsPct = totalRefs > 0 ? refs / totalRefs : 0;
+
+    // EANs con ventas CRF o MDO (en la métrica activa) en alguna región seleccionada
+    const crfRefRows = segRows.filter(r => regiones.some(reg => (r[reg + '|CRF_' + met] || 0) > 0));
+    const mdoRefRows = segRows.filter(r => regiones.some(reg => (r[reg + '|MDO_' + met] || 0) > 0));
+    const crfRefs = crfRefRows.length;
+    const mdoRefs = mdoRefRows.length;
+    // EANs únicos con venta en CRF O MDO (sin duplicar los que tienen ambos)
+    const totalSalesRefs = segRows.filter(r => regiones.some(reg =>
+      (r[reg + '|CRF_' + met] || 0) > 0 || (r[reg + '|MDO_' + met] || 0) > 0
+    )).length;
+
+    // Precio promedio de las referencias con ventas
+    const crfAvgPrice = crfRefs > 0 ? crfRefRows.reduce((s, r) => s + (r[precioCol] || 0), 0) / crfRefs : 0;
+    const mdoAvgPrice = mdoRefs > 0 ? mdoRefRows.reduce((s, r) => s + (r[precioCol] || 0), 0) / mdoRefs : 0;
+
+    let crf, mdo;
+    if (recalc || regiones.length > 1) {
+      crf = denCRF > 0 ? sumReg(segRows, 'CRF_' + met, regiones) / denCRF : 0;
+      mdo = denMDO > 0 ? sumReg(segRows, 'MDO_' + met, regiones) / denMDO : 0;
+    } else {
+      const r    = regiones[0];
+      const cCol = useUN ? 'CRF_PCT_UN_' + met : 'CRF_PCT_PG_' + met;
+      const mCol = useUN ? 'MDO_PCT_UN_' + met : 'MDO_PCT_PG_' + met;
+      crf = segRows.reduce((s, row) => s + (row[r + '|' + cCol] || 0), 0);
+      mdo = segRows.reduce((s, row) => s + (row[r + '|' + mCol] || 0), 0);
+    }
+    return { seg, refs, refsPct, crfRefs, mdoRefs, totalSalesRefs, crfAvgPrice, mdoAvgPrice, crf, mdo };
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// HELPERS SVG
+// ══════════════════════════════════════════════════════════════
+function el(tag, attrs) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
+  return e;
+}
+
+function svgText(x, y, content, attrs) {
+  const t = el('text', Object.assign({ x, y, 'text-anchor': 'middle' }, attrs || {}));
+  t.textContent = content;
+  return t;
+}
+
+// Recuadro blanco central con EANs + % EANs + desglose CRF/MDO
+function labelBox(svgEl, yCtr, lines) {
+  const lh = 16, pad = 6;
+  const h  = lines.length * lh + pad;
+  const w  = 132;
+  const y0 = yCtr - h / 2;
+
+  svgEl.appendChild(el('rect', {
+    x: -w / 2, y: y0, width: w, height: h,
+    rx: 4, fill: 'rgba(255,255,255,0.92)',
+    stroke: 'rgba(0,0,0,0.10)', 'stroke-width': '1'
+  }));
+
+  lines.forEach((txt, i) => {
+    // Línea 0: EANs (grande+bold), Línea 1: % (normal), Línea 2: CRF/MDO (pequeña+azul)
+    const fontSize   = i === 0 ? '13' : i === 1 ? '11' : '10';
+    const fontWeight = i === 0 ? '700' : '400';
+    const fill       = i === 2 ? '#4f81bd' : '#333';
+    const t = el('text', {
+      x: 0, y: y0 + lh * (i + 1) - 1,
+      'text-anchor': 'middle', fill,
+      'font-size': fontSize, 'font-weight': fontWeight,
+    });
+    t.textContent = txt;
+    svgEl.appendChild(t);
+  });
+}
+
+function addTrap(svgEl, seg, colorLeft, colorRight, tipLeft, tipRight) {
+  const [xTop, xBot] = SEG_X[seg];
+  const [yTop, yBot] = SEG_Y[seg];
+
+  const polyL = el('polygon', {
+    points: (-xTop)+','+yTop+' 0,'+yTop+' 0,'+yBot+' '+(-xBot)+','+yBot,
+    fill: colorLeft, stroke: 'white', 'stroke-width': '2', class: 'trap'
+  });
+  polyL.addEventListener('mousemove', e => showTip(e, tipLeft));
+  polyL.addEventListener('mouseleave', hideTip);
+  svgEl.appendChild(polyL);
+
+  const polyR = el('polygon', {
+    points: '0,'+yTop+' '+xTop+','+yTop+' '+xBot+','+yBot+' 0,'+yBot,
+    fill: colorRight, stroke: 'white', 'stroke-width': '2', class: 'trap'
+  });
+  polyR.addEventListener('mousemove', e => showTip(e, tipRight));
+  polyR.addEventListener('mouseleave', hideTip);
+  svgEl.appendChild(polyR);
+}
+
+// ══════════════════════════════════════════════════════════════
+// RENDERIZADO — misma función para ambas pirámides
+// showPct: muestra los % MDO/CRF fuera de la pirámide
+// subtitle: texto adicional debajo del encabezado (ej. "Total Nacional")
+// ══════════════════════════════════════════════════════════════
+// sumEANs: true → muestra crfRefs+mdoRefs como total (solo pirámide izquierda)
+function renderPyramid(svg, data, showPct, subtitle, useUni, sumEANs) {
+  svg.innerHTML = '';
+  const fmt    = v => (v * 100).toFixed(2) + '%';
+  const sufijo = useUni ? '%uni' : '%$';
+  const fmtP   = p => p > 0 ? '$' + Math.round(p).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '-';
+
+  // Encabezados MDO / CRF
+  svg.appendChild(svgText(-X_OUT, -32, 'MDO ' + sufijo, { fill: '#999', 'font-size': '11', 'font-weight': '700', 'text-anchor': 'end' }));
+  svg.appendChild(svgText( X_OUT, -32, 'CRF ' + sufijo, { fill: C_CRF, 'font-size': '11', 'font-weight': '700', 'text-anchor': 'start' }));
+
+  // Subtítulo centrado (ej. "Total Nacional")
+  if (subtitle) {
+    svg.appendChild(svgText(0, -32, subtitle, { fill: '#888', 'font-size': '10', 'font-weight': '600' }));
+  }
+
+  for (const d of data) {
+    const [yTop, yBot] = SEG_Y[d.seg];
+    const yCtr    = (yTop + yBot) / 2;
+    const refsPctTx = fmt(d.refsPct);
+
+    const totalEANs = sumEANs ? d.totalSalesRefs : d.refs;
+    addTrap(svg, d.seg, C_MDO, C_CRF,
+      d.seg + '\nMDO: ' + fmt(d.mdo) + '  |  EANs: ' + totalEANs + ' (' + refsPctTx + ')' +
+        '\nEANs MDO: ' + d.mdoRefs + '  |  EANs CRF: ' + d.crfRefs +
+        '\nIP prom  MDO: ' + fmtP(d.mdoAvgPrice) + '  |  CRF: ' + fmtP(d.crfAvgPrice),
+      d.seg + '\nCRF: ' + fmt(d.crf) + '  |  EANs: ' + totalEANs + ' (' + refsPctTx + ')' +
+        '\nEANs MDO: ' + d.mdoRefs + '  |  EANs CRF: ' + d.crfRefs +
+        '\nIP prom  MDO: ' + fmtP(d.mdoAvgPrice) + '  |  CRF: ' + fmtP(d.crfAvgPrice)
+    );
+
+    // Recuadro central: EANs + % + desglose MDO|CRF
+    labelBox(svg, yCtr, [
+      totalEANs + ' EANs',
+      refsPctTx,
+      'MDO: ' + d.mdoRefs + ' | CRF: ' + d.crfRefs,
+    ]);
+
+    // Labels externos: solo si Ver % está activo
+    if (showPct) {
+      const tL = el('text', { x: -X_OUT, y: yCtr + 5, 'text-anchor': 'end',   fill: '#555', 'font-size': '12', 'font-weight': '600' });
+      tL.textContent = fmt(d.mdo) + '  |  ' + fmtP(d.mdoAvgPrice);
+      const tR = el('text', { x:  X_OUT, y: yCtr + 5, 'text-anchor': 'start', fill: C_CRF,  'font-size': '12', 'font-weight': '600' });
+      tR.textContent = fmt(d.crf) + '  |  ' + fmtP(d.crfAvgPrice);
+      svg.appendChild(tL);
+      svg.appendChild(tR);
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// TOOLTIP
+// ══════════════════════════════════════════════════════════════
+const tooltipEl = document.getElementById('tooltip');
+
+function showTip(e, text) {
+  tooltipEl.innerHTML = text.replace(/\n/g, '<br>');
+  tooltipEl.style.display = 'block';
+  moveTip(e);
+}
+function hideTip() { tooltipEl.style.display = 'none'; }
+function moveTip(e) {
+  tooltipEl.style.left = (e.clientX + 14) + 'px';
+  tooltipEl.style.top  = (e.clientY - 12) + 'px';
+}
+document.addEventListener('mousemove', e => {
+  if (tooltipEl.style.display === 'block') moveTip(e);
+});
+
+// ══════════════════════════════════════════════════════════════
+// TABLA DE MARCAS POR SEGMENTO
+// ══════════════════════════════════════════════════════════════
+function renderSegTable() {
+  const plans    = getSelected('planSel');
+  const uns      = getSelected('unSel');
+  const marcas   = getSelected('marcaSel');
+  const segmento = document.getElementById('segSel').value;
+  const panel    = document.getElementById('segPanel');
+
+  if (!segmento || !allData.length) { panel.style.display = 'none'; return; }
+
+  panel.style.display = '';
+  document.getElementById('segNombreMdo').textContent = segmento;
+  document.getElementById('segNombreCrf').textContent = segmento;
+
+  const regiones  = getSelected('regionSel').length ? getSelected('regionSel') : ['TOTAL NACIONAL'];
+  const rangoCol  = uns.length > 0 ? 'RANGO_UN' : 'RANGO_PG';
+  const precioCol = uns.length > 0 ? 'PRECIO_UN' : 'PRECIO_PG';
+  const met       = 'IMP';
+
+  // Filtrar datos según PG / UN / Marca / Segmento
+  let rows = plans.length > 0 ? allData.filter(r => plans.includes(r.PLANOGRAMA)) : allData;
+  if (uns.length)    rows = rows.filter(r => uns.includes(r.UN));
+  if (marcas.length) rows = rows.filter(r => marcas.includes(r.MARCA));
+  rows = rows.filter(r => r[rangoCol] === segmento);
+
+  // Separar en MDO y CRF según si tienen ventas en las regiones seleccionadas
+  const mdoRows = rows.filter(r => regiones.some(reg => (r[reg + '|MDO_' + met] || 0) > 0));
+  const crfRows = rows.filter(r => regiones.some(reg => (r[reg + '|CRF_' + met] || 0) > 0));
+
+  const fmtP = p => p > 0
+    ? '$' + Math.round(p).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+    : '-';
+
+  // Agrupa por Marca y calcula precio promedio, ordena precio desc
+  function buildEntries(subset) {
+    const byMarca = {};
+    for (const r of subset) {
+      if (!byMarca[r.MARCA]) byMarca[r.MARCA] = { sum: 0, n: 0 };
+      byMarca[r.MARCA].sum += r[precioCol];
+      byMarca[r.MARCA].n++;
+    }
+    return Object.entries(byMarca)
+      .map(([marca, { sum, n }]) => ({ marca, precio: n > 0 ? sum / n : 0 }))
+      .sort((a, b) => b.precio - a.precio);
+  }
+
+  function fillTable(tbodyId, entries) {
+    const tbody = document.getElementById(tbodyId);
+    tbody.innerHTML = '';
+    if (!entries.length) {
+      tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;color:#aaa;padding:14px">Sin marcas para este segmento.</td></tr>';
+      return;
+    }
+    for (const { marca, precio } of entries) {
+      const tr  = document.createElement('tr');
+      const td1 = document.createElement('td'); td1.textContent = marca;
+      const td2 = document.createElement('td'); td2.textContent = fmtP(precio);
+      tr.appendChild(td1); tr.appendChild(td2);
+      tbody.appendChild(tr);
+    }
+  }
+
+  fillTable('segTablaMdo', buildEntries(mdoRows));
+  fillTable('segTablaCrf', buildEntries(crfRows));
+}
+
+// ══════════════════════════════════════════════════════════════
+// ACTUALIZACIÓN PRINCIPAL
+// ══════════════════════════════════════════════════════════════
+function update() {
+  const plans   = getSelected('planSel');
+  const svgP    = document.getElementById('svgPct');
+  const svgR    = document.getElementById('svgRefs');
+  const showPct = document.getElementById('showPctChk').checked;
+  const useUni  = document.getElementById('showUniChk').checked;
+
+  if (!allData.length) return;
+
+  const regiones = getSelected('regionSel').length ? getSelected('regionSel') : ['TOTAL NACIONAL'];
+  const uns      = getSelected('unSel');
+  const marcas   = getSelected('marcaSel');
+
+  // Pirámide izquierda: región seleccionada
+  renderPyramid(svgP, calcPct(plans, uns, marcas, regiones, useUni), showPct, null, useUni, true);
+
+  // Pirámide derecha: siempre TOTAL NACIONAL
+  renderPyramid(svgR, calcPct(plans, uns, marcas, ['TOTAL NACIONAL'], useUni), showPct, 'Total Nacional', useUni, true);
+
+  renderSegTable();
+}
+</script>
+</body>
+</html>
