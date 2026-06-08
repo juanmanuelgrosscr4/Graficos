@@ -5,15 +5,22 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pirámide de Segmentación</title>
+<link rel="icon" href="../favicon.ico" type="image/x-icon">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',Arial,sans-serif;background:#f1f5f9;color:#1e293b;font-size:13px}
-header{background:#1d4ed8;color:#fff;padding:12px 20px}
+header{background:#1d4ed8;color:#fff;padding:12px 20px;display:flex;align-items:center;gap:16px}
+.title-block{display:flex;flex-direction:column;flex:1}
 header h1{font-size:17px;font-weight:700}
 header span{font-size:12px;opacity:.75;display:block;margin-top:2px}
-.filters{background:#fff;border-bottom:1px solid #e2e8f0;padding:10px 20px;display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.filters{background:#fff;border-bottom:1px solid #e2e8f0;padding:10px 20px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
 .filters label{font-size:12px;color:#475569;font-weight:600}
 .filters select{padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;background:#fff;cursor:pointer;max-width:280px}
+.filter-group{display:flex;flex-direction:column;gap:3px;flex:1;min-width:150px}
+.filter-label{font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px}
+.filter-group select{width:100%;max-width:none}
+.filter-group select[multiple]{resize:none}
+.metric-row{background:#fff;border-bottom:1px solid #e2e8f0;padding:8px 20px;display:flex;align-items:center}
 .sep{width:1px;height:24px;background:#e2e8f0}
 .radio-group{display:flex;gap:0;border:1px solid #cbd5e1;border-radius:6px;overflow:hidden}
 .radio-group label{padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer;color:#475569;background:#fff;border-right:1px solid #cbd5e1;user-select:none}
@@ -31,7 +38,7 @@ header span{font-size:12px;opacity:.75;display:block;margin-top:2px}
 .ph-pvp{text-align:center;font-size:10px;font-weight:700;color:#1d4ed8;letter-spacing:.5px;padding-bottom:2px}
 .pyr-rows{display:flex;flex-direction:column;gap:4px}
 .pyr-row{display:grid;grid-template-columns:100px 1fr 100px 80px 100px 1fr 100px;align-items:center}
-.lbl{display:flex;flex-direction:column;gap:1px}
+.lbl{display:flex;flex-direction:column;justify-content:center;gap:1px}
 .lbl-mdo{align-items:flex-end;text-align:right;padding-right:8px}
 .lbl-crf{align-items:flex-start;text-align:left;padding-left:8px}
 .lbl-pct{font-size:12px;font-weight:700}
@@ -74,7 +81,7 @@ header span{font-size:12px;opacity:.75;display:block;margin-top:2px}
   align-items: center;
   gap: 6px;
   padding: 6px 14px;
-  background: #4f81bd;
+  background: rgba(255,255,255,.15);
   color: #fff !important;
   border-radius: 6px;
   font-size: 12px;
@@ -83,34 +90,44 @@ header span{font-size:12px;opacity:.75;display:block;margin-top:2px}
   cursor: pointer;
   white-space: nowrap;
   transition: background .15s;
-  border: none;
+  border: 1px solid rgba(255,255,255,.4);
 }
-.upload-btn:hover { background: #3a6a9e; }
-.file-status { font-size: 11px; color: #888; white-space: nowrap; }
-.file-status.loaded { color: #4f81bd; font-weight: 600; }
+.upload-btn:hover { background: rgba(255,255,255,.28); }
+.file-status { font-size: 11px; color: rgba(255,255,255,.75); white-space: nowrap; }
+.file-status.loaded { color: #fff; font-weight: 600; }
 </style>
 </head>
 <body>
 <header>
-  <h1 id="mainTitle">🔺 Pirámide de Segmentación — Carrefour</h1>
-  <span id="subTitle">· Análisis por región y planograma</span>
-</header>
-<div class="filters">
+  <div class="title-block">
+    <h1 id="mainTitle">🔺 Pirámide de Segmentación — Carrefour</h1>
+    <span id="subTitle">· Análisis por Región / Planograma / UN / Marca</span>
+  </div>
   <label class="upload-btn">
     <input type="file" id="fileInput" accept=".xlsx" style="display:none">
     &#128194; Cargar Excel
   </label>
   <span class="file-status" id="fileStatus">Sin archivo cargado</span>
-  <div class="sep"></div>
-  <label>Región</label>
-  <select id="sel-region" onchange="render()"></select>
-  <div class="sep"></div>
-  <label>Planograma</label>
-  <select id="sel-plano" onchange="onPlanoChange()"></select>
-  <div class="sep"></div>
-  <label>Unidad de Negocio</label>
-  <select id="sel-un" onchange="render()"></select>
-  <div class="sep"></div>
+</header>
+<div class="filters">
+  <div class="filter-group">
+    <span class="filter-label">Región</span>
+    <select id="sel-region" size="4" onchange="render()"></select>
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">Planograma</span>
+    <select id="sel-plano" size="4" onchange="onPlanoChange()"></select>
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">Unidad de Necesidad</span>
+    <select id="sel-un" multiple size="4"></select>
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">Marca</span>
+    <select id="sel-marca" multiple size="4"></select>
+  </div>
+</div>
+<div class="metric-row">
   <div class="radio-group" id="metric-btns">
     <label class="active" onclick="setMetric('imp',this)">Facturación $</label>
     <label onclick="setMetric('uni',this)">Unidades</label>
@@ -130,10 +147,10 @@ const RANGOS=['BAJO','MEDIO','ALTO','ALTA GAMA'];
 const RCOLS={'ALTA GAMA':'#6d28d9','ALTO':'#1d4ed8','MEDIO':'#2563eb','BAJO':'#60a5fa'};
 const RLGT={'ALTA GAMA':'#ede9fe','ALTO':'#dbeafe','MEDIO':'#bfdbfe','BAJO':'#eff6ff'};
 const SHAPE={
-  'BAJO':      {topF:1.00,botF:0.80},
-  'MEDIO':     {topF:0.80,botF:0.58},
-  'ALTO':      {topF:0.58,botF:0.34},
-  'ALTA GAMA': {topF:0.34,botF:0.12},
+  'BAJO':      {topF:0.80,botF:1.00},
+  'MEDIO':     {topF:0.58,botF:0.80},
+  'ALTO':      {topF:0.34,botF:0.58},
+  'ALTA GAMA': {topF:0.12,botF:0.34},
 };
 const ROW_H=86;
 
@@ -153,6 +170,12 @@ const fmtP  = v => (+(v||0)).toFixed(1)+'%';
 const selRegion=document.getElementById('sel-region');
 const selPlano=document.getElementById('sel-plano');
 const selUN=document.getElementById('sel-un');
+const selMarca=document.getElementById('sel-marca');
+let RAWROWS={};   // filas crudas por planograma (para recombinar UN seleccionadas)
+let ALLROWS=[];   // todas las filas (para __TOTAL__)
+let currentNodeMap=null; // {rango:{region:nodo}} para la combinación Plano+UN actual
+
+function getSelectedValues(sel){ return [...sel.selectedOptions].map(o=>o.value); }
 const mainTitleEl=document.getElementById('mainTitle');
 const subTitleEl=document.getElementById('subTitle');
 const BASE_TITLE=mainTitleEl.textContent;
@@ -169,18 +192,64 @@ function populateSelectors(){
 function onPlanoChange(){
   if(!META) return;
   const pl=selPlano.value;
-  selUN.innerHTML='<option value="__ALL__">Todas las UN</option>';
+  selUN.innerHTML='';
   if(pl!=='__TOTAL__')(D[pl]&&D[pl]._uns||[]).forEach(u=>{
     const o=document.createElement('option');o.value=u;o.textContent=u;selUN.appendChild(o);
   });
   selUN.disabled=(pl==='__TOTAL__');
+  populateMarcaOptions();
+  recalcCurrentNode();
   render();
 }
 
+function onUNChange(){
+  populateMarcaOptions();
+  recalcCurrentNode();
+  render();
+}
+
+selUN.addEventListener('change', onUNChange);
+selMarca.addEventListener('change', buildBrandPanel);
+
+// Lista de marcas disponibles según el planograma y las UN seleccionadas (para el filtro Marca)
+function populateMarcaOptions(){
+  selMarca.innerHTML='';
+  if(!META) return;
+  const pl=selPlano.value;
+  let rows;
+  if(pl==='__TOTAL__'){ rows=ALLROWS; }
+  else{
+    const prows=RAWROWS[pl]||[];
+    const selUNs=getSelectedValues(selUN);
+    rows=selUNs.length?prows.filter(r=>selUNs.includes(r[2])):prows;
+  }
+  const marcas=[...new Set(rows.map(r=>r[5]))].sort();
+  marcas.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;selMarca.appendChild(o);});
+}
+
+// Recalcula el mapa {rango:{region:nodo}} vigente según Planograma + UN seleccionadas.
+// Si no hay UN seleccionadas se usa el agregado __ALL__ (igual que antes); si hay una o más,
+// se combinan (recalculan) las filas de esas UN, agrupando por su RANGO_UN (col 21).
+function recalcCurrentNode(){
+  if(!META){ currentNodeMap=null; return; }
+  const pl=selPlano.value;
+  if(pl==='__TOTAL__'){ currentNodeMap=DTOT['__ALL__']; return; }
+  const selUNs=getSelectedValues(selUN);
+  if(!selUNs.length){ currentNodeMap=(D[pl]&&D[pl]['__ALL__'])||null; return; }
+  const prows=RAWROWS[pl]||[];
+  const filtered=prows.filter(r=>selUNs.includes(r[2]));
+  const out={};
+  RANGOS.forEach(rango=>{
+    const segRows=filtered.filter(r=>r[21]===rango);
+    if(segRows.length) out[rango]=buildSegRegionMap(segRows);
+  });
+  currentNodeMap=out;
+}
+
 function getSeg(rango,region){
-  const pl=selPlano.value,un=selUN.value||'__ALL__';
-  try{return pl==='__TOTAL__'?DTOT['__ALL__'][rango][region]||null:D[pl][un][rango][region]||null;}
-  catch(e){return null;}
+  if(!currentNodeMap) return null;
+  try{ return currentNodeMap[rango][region]||null; }
+  catch(e){ return null; }
 }
 
 function getVals(d){
@@ -267,7 +336,7 @@ function render(){
   const svgW=Math.max(Math.floor((totalW-480)/2),140);
 
   let html='';
-  RANGOS.forEach(rango=>{
+  [...RANGOS].reverse().forEach(rango=>{
     html+=`<div class="pyr-row">
       ${lblCell(rango,region,'mdo',ROW_H)}
       <div class="row-svg">${rowSVG(rango,region,svgW)}</div>
@@ -287,8 +356,9 @@ function setFilter(r,f){AF[r]=f;buildBrandPanel();}
 
 function buildBrandPanel(){
   const region=selRegion.value;
+  const selMarcas=getSelectedValues(selMarca);
   let html='';
-  ['ALTA GAMA','ALTO','MEDIO','BAJO'].forEach(rango=>{
+  ['BAJO','MEDIO','ALTO','ALTA GAMA'].forEach(rango=>{
     const d=getSeg(rango,region),col=RCOLS[rango],af=AF[rango]||'all';
     html+=`<div class="seg-col">
     <div class="seg-header" style="background:${col}">
@@ -303,9 +373,9 @@ function buildBrandPanel(){
       <button class="filt-btn ${af==='rec'?'active':''}"    onclick="setFilter('${rango}','rec')">★ Rec</button>
     </div>
     <div class="seg-body">`;
-    if(!d||!d.marcas||!d.marcas.length){html+='<div class="no-data">Sin datos</div>';}
+    if(!d||!d.marcas||!d.marcas.length){html+='<div class="no-data">Sin marcas con este filtro</div>';}
     else{
-      let ms=d.marcas;
+      let ms=selMarcas.length?d.marcas.filter(x=>selMarcas.includes(x.m)):d.marcas;
       if(af==='1reg')       ms=ms.filter(x=>(x.mr===1||x.cr===1));
       else if(af==='multi') ms=ms.filter(x=>x.mr>=2||x.cr>=2);
       else if(af==='nocrf') ms=ms.filter(x=>x.c===0);
@@ -385,7 +455,7 @@ function buildNode(rowsArr, region){
     const piRaw = totImp>0 ? (bci+bdi)/totImp*100 : 0;
     const puRaw = totUni>0 ? (bcu+bdu)/totUni*100 : 0;
     const c  = bcu>0 ? 1 : 0;
-    const rf = (c===0 && piRaw>1) ? 1 : 0;
+    const rf = (c===0 && piRaw>=3) ? 1 : 0;
     const pp  = (bcu+bdu)>0 ? round2((bci+bdi)/(bcu+bdu)) : 0;
     const ppc = bcu>0 ? round2(bci/bcu) : 0;
     const ppm = bdu>0 ? round2(bdi/bdu) : 0;
@@ -464,6 +534,9 @@ function parseWorkbook(wb){
   const planogramas = [...byPlano.keys()].sort();
   const newD = {};
   const segRanges = {};
+
+  RAWROWS = Object.fromEntries(byPlano);
+  ALLROWS = dataRows;
 
   planogramas.forEach(pl=>{
     const prows = byPlano.get(pl);

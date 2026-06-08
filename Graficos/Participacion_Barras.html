@@ -12,37 +12,50 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: 'Montserrat', sans-serif;
-      background: #f0f2f5;
-      color: #333;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
       min-height: 100vh;
+      font-size: 13px;
     }
 
     /* ── HEADER ── */
     .page-header {
-      background: #fff;
-      border-bottom: 1px solid #e0e0e0;
-      padding: 14px 24px;
+      background: #1d4ed8;
+      border-bottom: none;
+      padding: 12px 20px;
       display: flex;
       align-items: center;
       gap: 16px;
     }
-    .page-title {
-      font-size: 15px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1.2px;
-      color: #333;
+    .title-block {
+      display: flex;
+      flex-direction: column;
       flex: 1;
     }
-    .file-status { font-size: 11px; color: #888; white-space: nowrap; }
-    .file-status.loaded { color: #4f81bd; font-weight: 600; }
+    #mainTitle {
+      font-size: 17px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .page-title {
+      font-size: 12px;
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: normal;
+      color: #fff;
+      opacity: .75;
+      display: block;
+      margin-top: 2px;
+    }
+    .file-status { font-size: 11px; color: rgba(255,255,255,.75); white-space: nowrap; }
+    .file-status.loaded { color: #fff; font-weight: 600; }
     .upload-btn {
       display: inline-flex;
       align-items: center;
       gap: 6px;
       padding: 6px 14px;
-      background: #4f81bd;
+      background: rgba(255,255,255,.15);
       color: #fff;
       border-radius: 6px;
       font-size: 12px;
@@ -51,17 +64,17 @@
       cursor: pointer;
       white-space: nowrap;
       transition: background .15s;
-      border: none;
+      border: 1px solid rgba(255,255,255,.4);
     }
-    .upload-btn:hover { background: #3a6a9e; }
+    .upload-btn:hover { background: rgba(255,255,255,.28); }
 
     /* ── FILTERS ── */
     .filters-bar {
       background: #fff;
-      border-bottom: 1px solid #e0e0e0;
-      padding: 10px 24px;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 10px 20px;
       display: flex;
-      gap: 10px;
+      gap: 12px;
       flex-wrap: wrap;
       align-items: flex-start;
     }
@@ -75,31 +88,31 @@
     .filter-label {
       font-size: 10px;
       font-weight: 700;
-      color: #888;
+      color: #475569;
       text-transform: uppercase;
       letter-spacing: .5px;
     }
     select {
       font-family: inherit;
       font-size: 12px;
-      border: 1px solid #d0d0d0;
-      border-radius: 5px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
       padding: 5px 8px;
-      background: #fafafa;
-      color: #333;
+      background: #fff;
+      color: #1e293b;
       outline: none;
       transition: border-color .15s;
       cursor: pointer;
     }
-    select:hover  { border-color: #4f81bd; }
-    select:focus  { border-color: #4f81bd; box-shadow: 0 0 0 2px rgba(79,129,189,.15); }
+    select:hover  { border-color: #1d4ed8; }
+    select:focus  { border-color: #1d4ed8; box-shadow: 0 0 0 2px rgba(29,78,216,.15); }
     select[multiple] { resize: none; }
 
     /* ── VER % ── */
     .bottom-bar {
       background: #fff;
-      border-bottom: 1px solid #e0e0e0;
-      padding: 8px 24px;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 8px 20px;
       display: flex;
       align-items: center;
       gap: 12px;
@@ -107,27 +120,31 @@
     .checkbox-label {
       font-size: 12px;
       font-weight: 600;
-      color: #555;
+      color: #475569;
       display: flex;
       align-items: center;
       gap: 6px;
       cursor: pointer;
     }
     .checkbox-label input { cursor: pointer; }
+    .radio-group{display:flex;gap:0;border:1px solid #cbd5e1;border-radius:6px;overflow:hidden}
+    .radio-group label{padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer;color:#475569;background:#fff;border-right:1px solid #cbd5e1;user-select:none}
+    .radio-group label:last-child{border-right:none}
+    .radio-group label.active{background:#1d4ed8;color:#fff}
 
     /* ── MAIN ── */
-    .main { padding: 16px 24px 24px; }
+    .main { padding: 16px 20px 24px; }
 
     .charts-row {
       display: flex;
-      gap: 10px;
+      gap: 16px;
     }
     .chart-wrap {
       flex: 1;
       background: #fff;
       border-radius: 10px;
-      box-shadow: 0 1px 4px rgba(0,0,0,.08);
-      padding: 12px 8px 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+      padding: 16px 8px 8px;
       display: flex;
       flex-direction: column;
     }
@@ -138,17 +155,17 @@
       margin-bottom: 4px;
     }
     .sort-btn {
-      border: 1px solid #ccc;
-      border-radius: 4px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
       padding: 3px 10px;
       font-size: 12px;
       cursor: pointer;
       font-family: inherit;
       font-weight: 800;
     }
-    .btn-mdo         { background: #dce6f2; color: #555; }
+    .btn-mdo         { background: #eff6ff; color: #64748b; }
     .btn-mdo.inactive{ opacity: .45; }
-    .btn-crf         { background: #4f81bd; color: #fff; }
+    .btn-crf         { background: #1d4ed8; color: #fff; }
     .btn-crf.inactive{ opacity: .45; }
     .chart-div { flex: none; }
     .empty-state {
@@ -156,7 +173,7 @@
       align-items: center;
       justify-content: center;
       min-height: 300px;
-      color: #ccc;
+      color: #94a3b8;
       font-size: 13px;
     }
   </style>
@@ -165,7 +182,10 @@
 
 <!-- HEADER -->
 <header class="page-header">
-  <span id="SpanTituloGraficos" class="page-title">Análisis de Categorías — Participación</span>
+  <div class="title-block">
+    <h1 id="mainTitle">📊 Gráfico Participación — Carrefour</h1>
+    <span id="SpanTituloGraficos" class="page-title">· Análisis por Región / Planograma / UN / Marca</span>
+  </div>
   <label class="upload-btn">
     <input type="file" id="fileInput" accept=".xlsx" style="display:none">
     &#128194; Cargar Excel
@@ -184,7 +204,7 @@
     <select id="planSel" multiple size="4"></select>
   </div>
   <div class="filter-group">
-    <span class="filter-label">UN</span>
+    <span class="filter-label">Unidad de Necesidad</span>
     <select id="unSel" multiple size="4"></select>
   </div>
   <div class="filter-group">
@@ -195,15 +215,11 @@
 
 <!-- VER % + AGRUPAR POR -->
 <div class="bottom-bar">
-  <label class="checkbox-label">
-    <input type="checkbox" id="showPctChk"> Ver %
-  </label>
-  <label class="checkbox-label">
-    <input type="checkbox" id="showIPChk"> Ver IP
-  </label>
-  <label class="checkbox-label">
-    <input type="checkbox" id="showShareChk"> Ver Share
-  </label>
+  <div class="radio-group" id="view-btns">
+    <label data-mode="pct"   onclick="setViewMode('pct',this)">Ver %</label>
+    <label data-mode="ip"    onclick="setViewMode('ip',this)">Ver IP</label>
+    <label data-mode="share" onclick="setViewMode('share',this)">Ver Share</label>
+  </div>
   <div style="display:flex; flex-direction:column; gap:3px;">
     <span class="filter-label">Agrupar por</span>
     <select id="groupBySel" style="min-width:130px;">
@@ -293,6 +309,7 @@ let sortUni = { col: 'crfPctUni', asc: true };
 // CARGA DE ARCHIVO (vía selector de archivo)
 // ══════════════════════════════════════════════════════════════
 const BASE_TITLE = document.getElementById('SpanTituloGraficos').textContent;
+const BASE_H1 = document.getElementById('mainTitle').textContent;
 
 document.getElementById('fileInput').addEventListener('change', function () {
   const file = this.files[0];
@@ -302,8 +319,6 @@ document.getElementById('fileInput').addEventListener('change', function () {
   reader.onload = function (e) {
     try {
       const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-      // Resetear título base antes de parsear (por si se carga un nuevo archivo)
-      document.getElementById('SpanTituloGraficos').textContent = BASE_TITLE;
       parseWorkbook(wb);
       setStatus('✓ ' + file.name, true);
     } catch (err) {
@@ -327,9 +342,11 @@ function parseWorkbook(wb) {
   const ws   = wb.Sheets['Export'];
   if (!ws) { setStatus('✗ No se encontró la hoja "Export"', false); return; }
 
-  // Leer A1 y concatenar al título
+  // Leer A1 y B1 y concatenarlos al título / subtítulo (reseteando el texto base primero)
   const a1 = ws['A1'] ? String(ws['A1'].v || ws['A1'].w || '').trim() : '';
-  if (a1) document.querySelector('.page-title').textContent += ' — ' + a1;
+  const b1 = ws['B1'] ? String(ws['B1'].v || ws['B1'].w || '').trim() : '';
+  document.getElementById('mainTitle').textContent = b1 ? BASE_H1 + b1 : BASE_H1;
+  document.getElementById('SpanTituloGraficos').textContent = a1 ? a1 + " " + BASE_TITLE : BASE_TITLE;
 
   // sheet_to_json con header:1 devuelve cada fila como array 0-indexado
   // Python usa header=2 → las filas 0,1,2 son encabezados, los datos empiezan en índice 3
@@ -499,28 +516,16 @@ document.getElementById('unSel').addEventListener('change', function () {
 document.getElementById('marcaSel').addEventListener('change', renderCharts);
 document.getElementById('groupBySel').addEventListener('change', renderCharts);
 
-// Ver %, Ver IP y Ver Share son mutuamente excluyentes
-document.getElementById('showPctChk').addEventListener('change', function () {
-  if (this.checked) {
-    document.getElementById('showIPChk').checked    = false;
-    document.getElementById('showShareChk').checked = false;
-  }
+// Ver %, Ver IP y Ver Share son mutuamente excluyentes (botones tipo radio-group;
+// un click sobre el botón activo lo desactiva, dejando "ninguno" seleccionado)
+let viewMode = '';
+function setViewMode(mode, el) {
+  viewMode = (viewMode === mode) ? '' : mode;
+  document.querySelectorAll('#view-btns label').forEach(l => {
+    l.classList.toggle('active', l.dataset.mode === viewMode);
+  });
   renderCharts();
-});
-document.getElementById('showIPChk').addEventListener('change', function () {
-  if (this.checked) {
-    document.getElementById('showPctChk').checked   = false;
-    document.getElementById('showShareChk').checked = false;
-  }
-  renderCharts();
-});
-document.getElementById('showShareChk').addEventListener('change', function () {
-  if (this.checked) {
-    document.getElementById('showPctChk').checked = false;
-    document.getElementById('showIPChk').checked  = false;
-  }
-  renderCharts();
-});
+}
 
 // ══════════════════════════════════════════════════════════════
 // CÁLCULO
@@ -764,9 +769,9 @@ function renderCharts() {
   const regs    = getSelected('regionSel');
   const uns     = getSelected('unSel');
   const marcas  = getSelected('marcaSel');
-  const showPct   = document.getElementById('showPctChk').checked;
-  const showIP    = document.getElementById('showIPChk').checked;
-  const showShare = document.getElementById('showShareChk').checked;
+  const showPct   = viewMode === 'pct';
+  const showIP    = viewMode === 'ip';
+  const showShare = viewMode === 'share';
   const groupBy   = document.getElementById('groupBySel').value;
 
   const regiones = regs.length ? regs : ['TOTAL NACIONAL'];
