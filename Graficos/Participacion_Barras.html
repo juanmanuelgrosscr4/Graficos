@@ -131,6 +131,7 @@
     .radio-group label{padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer;color:#475569;background:#fff;border-right:1px solid #cbd5e1;user-select:none}
     .radio-group label:last-child{border-right:none}
     .radio-group label.active{background:#1d4ed8;color:#fff}
+    .radio-group label.disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
 
     /* ── MAIN ── */
     .main { padding: 16px 20px 24px; }
@@ -219,14 +220,20 @@
     <label data-mode="pct"   onclick="setViewMode('pct',this)">Ver %</label>
     <label data-mode="ip"    onclick="setViewMode('ip',this)">Ver IP</label>
     <label data-mode="share" onclick="setViewMode('share',this)">Ver Share</label>
+    <label data-mode="progresion" onclick="setViewMode('progresion',this)">Ver Progresión</label>
   </div>
   <div style="display:flex; flex-direction:column; gap:3px;">
     <span class="filter-label">Agrupar por</span>
-    <select id="groupBySel" style="min-width:130px;">
+    <select id="groupBySel" style="min-width:180px;">
       <option value="PLANOGRAMA">Planograma</option>
       <option value="UN">UN</option>
       <option value="MARCA" selected>Marcas</option>
+      <option value="CATEGORIA">Categoría Scentia</option>
     </select>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:3px;">
+    <span class="filter-label">Sección</span>
+    <select id="seccionSel" style="min-width:130px;"></select>
   </div>
 </div>
 
@@ -263,16 +270,38 @@
 // ══════════════════════════════════════════════════════════════
 // CONSTANTES
 // ══════════════════════════════════════════════════════════════
-// Columna base de cada región (1-indexada, igual que el Python)
-const REGION_BASE = {
-  'TOTAL NACIONAL': 23,
-  'NOA':            35,
-  'LITORAL':        47,
-  'CUYO':           59,
-  'CÓRDOBA':        71,
-  'BS AS':          83,
-  'PATAGONIA':      95,
+// ============================================================
+// Layout de columnas de la hoja "Export" (índices 0-based de XLSX.utils.sheet_to_json).
+// Se agregó la columna "Sección" en la columna B → todas las columnas posteriores se
+// corrieron +1 (igual que en Piramide_Segmentacion.html). Si en el futuro cambia el
+// layout, ajustar ÚNICAMENTE estos valores (COL y REGION_BASE_START).
+// ============================================================
+const COL = {
+  SECCION:         1,  // columna B
+  PLANOGRAMA:      2,
+  UN:              3,
+  MARCA:           6,
+  CATEGORIA:       7,
+  YTD_SH_IMP_2026: 108,
+  YTD_DIF_SH_IMP:  109,
+  YTD_SH_VOL_2026: 111,
+  YTD_DIF_SH_VOL:  112,
+  // Columnas de Progresión (agregadas 2026-06-22), columnas DJ a DO del Excel
+  YTD_PCT_PROG_RM_IMP:  113, // DJ - YTD % Prog RM $
+  YTD_PCT_PROG_CRF_IMP: 114, // DK - YTD % Prog CRF $
+  YTD_GAP_CRF_RM_IMP:   115, // DL - YTD GAP CRF vs RM $
+  YTD_PCT_PROG_RM_VOL:  116, // DM - YTD % Prog RM VOL
+  YTD_PCT_PROG_CRF_VOL: 117, // DN - YTD % Prog CRF VOL
+  YTD_GAP_CRF_RM_VOL:   118, // DO - YTD GAP CRF vs RM VOL
 };
+
+// Columna base de cada región (1-indexada, igual que el Python)
+const REGION_BASE_START = 24;
+const REGION_STEP = 12;
+const REGION_BASE = {};
+['TOTAL NACIONAL','NOA','LITORAL','CUYO','CÓRDOBA','BS AS','PATAGONIA'].forEach((region,i)=>{
+  REGION_BASE[region] = REGION_BASE_START + i*REGION_STEP;
+});
 
 // Las 12 métricas por región, en el mismo orden que el Python
 const METRICAS = [
@@ -356,17 +385,24 @@ function parseWorkbook(wb) {
 
   for (const row of rows.slice(3)) {
     // Filtrar filas vacías (equivalente al dropna del Python)
-    if (!row[1] || !row[2] || !row[5]) continue;
+    if (!row[COL.PLANOGRAMA] || !row[COL.UN] || !row[COL.MARCA]) continue;
 
     const obj = {
-      PLANOGRAMA:      String(row[1]).trim(),
-      UN:              String(row[2]).trim(),
-      MARCA:           String(row[5]).trim(),
-      CATEGORIA:        String(row[6]   || '').trim(),
-      YTD_SH_IMP_2026:  parseFloat(row[107]) || 0,
-      YTD_DIF_SH_IMP:   parseFloat(row[108]) || 0,
-      YTD_SH_VOL_2026:  parseFloat(row[110]) || 0,
-      YTD_DIF_SH_VOL:   parseFloat(row[111]) || 0,
+      SECCION:          String(row[COL.SECCION]    || '').trim(),
+      PLANOGRAMA:       String(row[COL.PLANOGRAMA]).trim(),
+      UN:               String(row[COL.UN]).trim(),
+      MARCA:            String(row[COL.MARCA]).trim(),
+      CATEGORIA:        String(row[COL.CATEGORIA]   || '').trim(),
+      YTD_SH_IMP_2026:  parseFloat(row[COL.YTD_SH_IMP_2026]) || 0,
+      YTD_DIF_SH_IMP:   parseFloat(row[COL.YTD_DIF_SH_IMP])  || 0,
+      YTD_SH_VOL_2026:  parseFloat(row[COL.YTD_SH_VOL_2026]) || 0,
+      YTD_DIF_SH_VOL:   parseFloat(row[COL.YTD_DIF_SH_VOL])  || 0,
+      YTD_PCT_PROG_RM_IMP:  parseFloat(row[COL.YTD_PCT_PROG_RM_IMP])  || 0,
+      YTD_PCT_PROG_CRF_IMP: parseFloat(row[COL.YTD_PCT_PROG_CRF_IMP]) || 0,
+      YTD_GAP_CRF_RM_IMP:   parseFloat(row[COL.YTD_GAP_CRF_RM_IMP])   || 0,
+      YTD_PCT_PROG_RM_VOL:  parseFloat(row[COL.YTD_PCT_PROG_RM_VOL])  || 0,
+      YTD_PCT_PROG_CRF_VOL: parseFloat(row[COL.YTD_PCT_PROG_CRF_VOL]) || 0,
+      YTD_GAP_CRF_RM_VOL:   parseFloat(row[COL.YTD_GAP_CRF_RM_VOL])   || 0,
     };
 
     // Para cada región, leer las 12 métricas
@@ -387,9 +423,11 @@ function parseWorkbook(wb) {
     return;
   }
 
+  populateSeccionFilter();
   populateRegionFilter();
   populatePlanFilter();
   resetChainedFilters(null);
+  updateViewBtnsAvailability();
   renderCharts();
 }
 
@@ -414,11 +452,32 @@ function populateRegionFilter() {
   prevRegiones = ['TOTAL NACIONAL'];
 }
 
+function populateSeccionFilter() {
+  const sel = document.getElementById('seccionSel');
+  sel.innerHTML = '';
+  const optAll = document.createElement('option');
+  optAll.value = '';
+  optAll.textContent = '— Todas —';
+  sel.appendChild(optAll);
+  const secciones = [...new Set(allData.map(r => r.SECCION).filter(Boolean))].sort();
+  for (const s of secciones) {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = s;
+    sel.appendChild(opt);
+  }
+}
+
+// Subconjunto de allData restringido a la Sección elegida (o todo, si no hay filtro)
+function getSeccionFilteredData() {
+  const sec = document.getElementById('seccionSel').value;
+  return sec ? allData.filter(r => r.SECCION === sec) : allData;
+}
+
 function populatePlanFilter() {
   const sel = document.getElementById('planSel');
   sel.innerHTML = '';
   addPlaceholder(sel);
-  const planes = [...new Set(allData.map(r => r.PLANOGRAMA))].sort();
+  const planes = [...new Set(getSeccionFilteredData().map(r => r.PLANOGRAMA))].sort();
   for (const p of planes) {
     const opt = document.createElement('option');
     opt.value = opt.textContent = p;
@@ -444,7 +503,7 @@ function resetChainedFilters(plans) {
   addPlaceholder(marcaSel);
   if (!plans || !plans.length) return;
 
-  const pg  = allData.filter(r => plans.includes(r.PLANOGRAMA));
+  const pg  = getSeccionFilteredData().filter(r => plans.includes(r.PLANOGRAMA));
   const uns = [...new Set(pg.map(r => r.UN))].sort();
   for (const u of uns) {
     const opt = document.createElement('option');
@@ -463,7 +522,7 @@ function resetChainedFilters(plans) {
 function updateMarcaOptions() {
   const plans = getSelected('planSel');
   if (!plans.length) return;
-  const pg   = allData.filter(r => plans.includes(r.PLANOGRAMA));
+  const pg   = getSeccionFilteredData().filter(r => plans.includes(r.PLANOGRAMA));
   const uns  = getSelected('unSel');
   const base = uns.length ? pg.filter(r => uns.includes(r.UN)) : pg;
   const marcas = [...new Set(base.map(r => r.MARCA))].sort();
@@ -500,6 +559,13 @@ document.getElementById('regionSel').addEventListener('change', function () {
   renderCharts();
 });
 
+// ── Cambio de Sección ──────────────────────────────────────────
+document.getElementById('seccionSel').addEventListener('change', function () {
+  populatePlanFilter();
+  resetChainedFilters(null);
+  renderCharts();
+});
+
 // ── Cambio de planograma ───────────────────────────────────────
 document.getElementById('planSel').addEventListener('change', function () {
   resetChainedFilters(getSelected('planSel'));
@@ -514,12 +580,16 @@ document.getElementById('unSel').addEventListener('change', function () {
 
 // ── Cambio de Marca / Ver % / Ver IP / Agrupar por ───────────
 document.getElementById('marcaSel').addEventListener('change', renderCharts);
-document.getElementById('groupBySel').addEventListener('change', renderCharts);
+document.getElementById('groupBySel').addEventListener('change', function () {
+  updateViewBtnsAvailability();
+  renderCharts();
+});
 
 // Ver %, Ver IP y Ver Share son mutuamente excluyentes (botones tipo radio-group;
 // un click sobre el botón activo lo desactiva, dejando "ninguno" seleccionado)
 let viewMode = '';
 function setViewMode(mode, el) {
+  if (el.classList.contains('disabled')) return;
   viewMode = (viewMode === mode) ? '' : mode;
   document.querySelectorAll('#view-btns label').forEach(l => {
     l.classList.toggle('active', l.dataset.mode === viewMode);
@@ -527,18 +597,48 @@ function setViewMode(mode, el) {
   renderCharts();
 }
 
+// "Ver IP" solo es válido agrupando por Marca, UN o Planograma (es el precio promedio
+// = facturación/unidades de ese grupo) → se deshabilita agrupando por Categoría Scentia.
+// "Ver Share" y "Ver Progresión" son lo opuesto: solo tienen sentido agrupando por
+// Categoría Scentia → se deshabilitan en cualquier otro agrupamiento.
+// "Ver %" queda habilitado siempre. Si el modo activo deja de estar permitido, se vuelve
+// a "ninguno".
+function updateViewBtnsAvailability() {
+  const groupBy      = document.getElementById('groupBySel').value;
+  const isCategoria  = groupBy === 'CATEGORIA';
+  const ipAllowed    = !isCategoria;
+  const shareAllowed = isCategoria;
+  const progAllowed  = isCategoria;
+  const ipBtn    = document.querySelector('#view-btns label[data-mode="ip"]');
+  const shareBtn = document.querySelector('#view-btns label[data-mode="share"]');
+  const progBtn  = document.querySelector('#view-btns label[data-mode="progresion"]');
+  ipBtn.classList.toggle('disabled', !ipAllowed);
+  shareBtn.classList.toggle('disabled', !shareAllowed);
+  progBtn.classList.toggle('disabled', !progAllowed);
+
+  let changed = false;
+  if (!ipAllowed    && viewMode === 'ip')         { viewMode = ''; changed = true; }
+  if (!shareAllowed && viewMode === 'share')      { viewMode = ''; changed = true; }
+  if (!progAllowed  && viewMode === 'progresion') { viewMode = ''; changed = true; }
+  if (changed) {
+    document.querySelectorAll('#view-btns label').forEach(l => {
+      l.classList.toggle('active', l.dataset.mode === viewMode);
+    });
+  }
+}
+
 // ══════════════════════════════════════════════════════════════
 // CÁLCULO
 // groupBy: 'MARCA' (default), 'PLANOGRAMA' o 'UN'
 // ══════════════════════════════════════════════════════════════
-function calcBrands(plans, uns, marcas, regiones, groupBy) {
+function calcBrands(plans, uns, marcas, regiones, groupBy, seccion) {
   groupBy = groupBy || 'MARCA';
 
   // Sin planograma seleccionado solo bloqueamos en modo MARCA (demasiadas marcas)
   if (groupBy === 'MARCA' && (!plans || !plans.length)) return [];
 
   // ── Filtrar datos base ────────────────────────────────────────
-  let base = allData;
+  let base = seccion ? allData.filter(r => r.SECCION === seccion) : allData;
   if (plans && plans.length)   base = base.filter(r => plans.includes(r.PLANOGRAMA));
   if (uns   && uns.length)     base = base.filter(r => uns.includes(r.UN));
   if (marcas && marcas.length) base = base.filter(r => marcas.includes(r.MARCA));
@@ -565,6 +665,22 @@ function calcBrands(plans, uns, marcas, regiones, groupBy) {
         shareDifImp:  row.YTD_DIF_SH_IMP   || 0,
         shareVol2026: row.YTD_SH_VOL_2026  || 0,
         shareDifVol:  row.YTD_DIF_SH_VOL   || 0,
+      };
+    }
+  }
+
+  // ── Lookup CATEGORIA → progresión (primera ocurrencia en base filtrada) ──
+  // Usado por "Ver Progresión" (solo tiene sentido agrupando por Categoría Scentia)
+  const progMap = {};
+  for (const row of base) {
+    if (row.CATEGORIA && !(row.CATEGORIA in progMap)) {
+      progMap[row.CATEGORIA] = {
+        pctProgRmImp:  row.YTD_PCT_PROG_RM_IMP  || 0,
+        pctProgCrfImp: row.YTD_PCT_PROG_CRF_IMP || 0,
+        gapCrfRmImp:   row.YTD_GAP_CRF_RM_IMP   || 0,
+        pctProgRmVol:  row.YTD_PCT_PROG_RM_VOL  || 0,
+        pctProgCrfVol: row.YTD_PCT_PROG_CRF_VOL || 0,
+        gapCrfRmVol:   row.YTD_GAP_CRF_RM_VOL   || 0,
       };
     }
   }
@@ -620,9 +736,13 @@ function calcBrands(plans, uns, marcas, regiones, groupBy) {
     }));
   }
 
-  // ── Índice de precio + share diferencial por item ───────────
+  // ── Índice de precio + share diferencial + progresión por item ──
   return items.map(b => {
     const catShare = catShareMap[b.categoria] || { shareImp2026: 0, shareDifImp: 0, shareVol2026: 0, shareDifVol: 0 };
+    const prog = progMap[b.categoria] || {
+      pctProgRmImp: 0, pctProgCrfImp: 0, gapCrfRmImp: 0,
+      pctProgRmVol: 0, pctProgCrfVol: 0, gapCrfRmVol: 0,
+    };
     return {
       ...b,
       priceIdxCrf:  b.crfUni > 0 ? b.crfImp / b.crfUni : 0,
@@ -631,6 +751,12 @@ function calcBrands(plans, uns, marcas, regiones, groupBy) {
       shareDifImp:  catShare.shareDifImp,
       shareVol2026: catShare.shareVol2026,
       shareDifVol:  catShare.shareDifVol,
+      pctProgRmImp:  prog.pctProgRmImp,
+      pctProgCrfImp: prog.pctProgCrfImp,
+      gapCrfRmImp:   prog.gapCrfRmImp,
+      pctProgRmVol:  prog.pctProgRmVol,
+      pctProgCrfVol: prog.pctProgCrfVol,
+      gapCrfRmVol:   prog.gapCrfRmVol,
     };
   });
 }
@@ -644,7 +770,7 @@ function fmt(v) {
   // return v >= 0.00005 ? (v * 100).toFixed(2) + '%' : '';
 }
 
-function renderMirrorChart(divId, brands, colMdo, colCrf, labelMdo, labelCrf, showPct, groupBy, showIP, showShare, shareCol) {
+function renderMirrorChart(divId, brands, colMdo, colCrf, labelMdo, labelCrf, showPct, groupBy, showIP, showShare, shareCol, showProg, progMdoCol, progCrfPctCol, progGapCol) {
   const el = document.getElementById(divId);
   groupBy = groupBy || 'MARCA';
 
@@ -682,16 +808,28 @@ function renderMirrorChart(divId, brands, colMdo, colCrf, labelMdo, labelCrf, sh
   // Mapa shareCol → col 2026 correspondiente
   const share2026Col = shareCol === 'shareDifImp' ? 'shareImp2026' : 'shareVol2026';
 
+  // Formato progresión MDO (lado RM): "85.32%"
+  const fmtPctSimple = v => (v * 100).toFixed(2) + '%';
+  // Formato progresión CRF: "92.10% | +6.78%" (valor CRF | gap CRF vs RM)
+  const fmtProgFull = (pctCrf, gap) => {
+    const sign = gap >= 0 ? '+' : '';
+    return fmtPctSimple(pctCrf) + '  |  ' + sign + (gap * 100).toFixed(2) + '%';
+  };
+
   // ── Texto para barra MDO (izquierda) ─────────────────────────
   // Ver Share: sin texto en MDO (el share se muestra solo en CRF)
+  // Ver Progresión: muestra el % Prog RM (DJ/DM) de la categoría
   const barTextMdo = (vals, idxArr) => {
+    if (showProg)  return brands.map(b => fmtPctSimple(b[progMdoCol] || 0));
     if (showShare) return vals.map(() => '');
     if (!showPct && !showIP) return undefined;
     return vals.map((v, i) => showIP ? (idxArr[i] > 0 ? fmtIP(idxArr[i]) : '') : fmt(v));
   };
 
   // ── Texto para barra CRF (derecha) ───────────────────────────
+  // Ver Progresión: muestra "% Prog CRF | GAP CRF vs RM" (DK|DL o DN|DO) de la categoría
   const barTextCrf = (vals, idxArr) => {
+    if (showProg) return brands.map(b => fmtProgFull(b[progCrfPctCol] || 0, b[progGapCol] || 0));
     if (!showPct && !showIP && !showShare) return undefined;
     return vals.map((v, i) => {
       if (showShare) return fmtShareFull(brands[i][share2026Col] || 0, brands[i][shareCol] || 0);
@@ -769,21 +907,23 @@ function renderCharts() {
   const regs    = getSelected('regionSel');
   const uns     = getSelected('unSel');
   const marcas  = getSelected('marcaSel');
+  const seccion = document.getElementById('seccionSel').value;
   const showPct   = viewMode === 'pct';
   const showIP    = viewMode === 'ip';
   const showShare = viewMode === 'share';
+  const showProg  = viewMode === 'progresion';
   const groupBy   = document.getElementById('groupBySel').value;
 
   const regiones = regs.length ? regs : ['TOTAL NACIONAL'];
 
   // Calcular una sola vez, luego ordenar diferente para cada gráfico
-  const allBrands = calcBrands(plans, uns, marcas, regiones, groupBy);
+  const allBrands = calcBrands(plans, uns, marcas, regiones, groupBy, seccion);
 
   const sortFn = (brands, state) =>
     [...brands].sort((a, b) => state.asc ? a[state.col] - b[state.col] : b[state.col] - a[state.col]);
 
-  renderMirrorChart('chartImp', sortFn(allBrands, sortImp), 'mdoPctImp', 'crfPctImp', 'MDO %$',   'CRF %$',   showPct, groupBy, showIP, showShare, 'shareDifImp');
-  renderMirrorChart('chartUni', sortFn(allBrands, sortUni), 'mdoPctUni', 'crfPctUni', 'MDO %uni', 'CRF %uni', showPct, groupBy, showIP, showShare, 'shareDifVol');
+  renderMirrorChart('chartImp', sortFn(allBrands, sortImp), 'mdoPctImp', 'crfPctImp', 'MDO %$',   'CRF %$',   showPct, groupBy, showIP, showShare, 'shareDifImp', showProg, 'pctProgRmImp', 'pctProgCrfImp', 'gapCrfRmImp');
+  renderMirrorChart('chartUni', sortFn(allBrands, sortUni), 'mdoPctUni', 'crfPctUni', 'MDO %uni', 'CRF %uni', showPct, groupBy, showIP, showShare, 'shareDifVol', showProg, 'pctProgRmVol', 'pctProgCrfVol', 'gapCrfRmVol');
 }
 
 // ══════════════════════════════════════════════════════════════

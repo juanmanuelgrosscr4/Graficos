@@ -20,12 +20,13 @@ header span{font-size:12px;opacity:.75;display:block;margin-top:2px}
 .filter-label{font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px}
 .filter-group select{width:100%;max-width:none}
 .filter-group select[multiple]{resize:none}
-.metric-row{background:#fff;border-bottom:1px solid #e2e8f0;padding:8px 20px;display:flex;align-items:center}
+.metric-row{background:#fff;border-bottom:1px solid #e2e8f0;padding:8px 20px;display:flex;align-items:center;gap:12px}
 .sep{width:1px;height:24px;background:#e2e8f0}
 .radio-group{display:flex;gap:0;border:1px solid #cbd5e1;border-radius:6px;overflow:hidden}
 .radio-group label{padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer;color:#475569;background:#fff;border-right:1px solid #cbd5e1;user-select:none}
 .radio-group label:last-child{border-right:none}
 .radio-group label.active{background:#1d4ed8;color:#fff}
+.metric-row select{padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;background:#fff;cursor:pointer;max-width:220px;width:100%}
 .main{padding:16px 20px;display:flex;flex-direction:column;gap:16px}
 .pyr-section{background:#fff;border-radius:10px;padding:16px 20px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .pyr-header{display:grid;grid-template-columns:100px 1fr 100px 80px 100px 1fr 100px;margin-bottom:8px;align-items:end}
@@ -116,7 +117,7 @@ header span{font-size:12px;opacity:.75;display:block;margin-top:2px}
   </div>
   <div class="filter-group">
     <span class="filter-label">Planograma</span>
-    <select id="sel-plano" size="4" onchange="onPlanoChange()"></select>
+    <select id="sel-plano" multiple size="4"></select>
   </div>
   <div class="filter-group">
     <span class="filter-label">Unidad de Necesidad</span>
@@ -133,6 +134,10 @@ header span{font-size:12px;opacity:.75;display:block;margin-top:2px}
     <label onclick="setMetric('uni',this)">Unidades</label>
     <label onclick="setMetric('ean',this)">EANs</label>
   </div>
+  <div style="display:flex;flex-direction:column;gap:3px">
+    <span class="filter-label">Sección</span>
+    <select id="sel-seccion" onchange="onSeccionChange()" style="min-width:130px"></select>
+  </div>
 </div>
 <div class="main">
   <div class="pyr-section">
@@ -142,7 +147,21 @@ header span{font-size:12px;opacity:.75;display:block;margin-top:2px}
   <div class="brand-panel" id="brand-panel"></div>
 </div>
 <script>
-let META=null, D=null, DTOT=null;
+// ============================================================
+// Layout de columnas de la hoja "Export" (índices 0-based de XLSX.utils.sheet_to_json).
+// Si en el futuro se agrega/quita una columna en el Excel, ajustar ÚNICAMENTE estos
+// valores (COL y REGION_BASE_START) en vez de buscar números sueltos en todo el script.
+// ============================================================
+const COL = {
+  SECCION:    1,  // columna B
+  PLANOGRAMA: 2,
+  UN:         3,
+  MARCA:      6,
+  RANGO:      21, // segmentación calculada a nivel planograma (sin UN)
+  RANGO_UN:   22, // segmentación calculada a nivel UN
+};
+
+let META=null;
 const RANGOS=['BAJO','MEDIO','ALTO','ALTA GAMA'];
 const RCOLS={'ALTA GAMA':'#6d28d9','ALTO':'#1d4ed8','MEDIO':'#2563eb','BAJO':'#60a5fa'};
 const RLGT={'ALTA GAMA':'#ede9fe','ALTO':'#dbeafe','MEDIO':'#bfdbfe','BAJO':'#eff6ff'};
@@ -168,14 +187,38 @@ const fmt$  = v => v>0 ? '$'+fmtN(v) : '—';
 const fmtP  = v => (+(v||0)).toFixed(1)+'%';
 
 const selRegion=document.getElementById('sel-region');
+const selSeccion=document.getElementById('sel-seccion');
 const selPlano=document.getElementById('sel-plano');
 const selUN=document.getElementById('sel-un');
 const selMarca=document.getElementById('sel-marca');
-let RAWROWS={};   // filas crudas por planograma (para recombinar UN seleccionadas)
-let ALLROWS=[];   // todas las filas (para __TOTAL__)
-let currentNodeMap=null; // {rango:{region:nodo}} para la combinación Plano+UN actual
+let RAWROWS={};   // filas crudas por planograma, dentro de la Sección seleccionada
+let ALLROWS=[];   // todas las filas del Excel (sin filtrar por Sección)
+let currentNodeMap=null; // {rango:{region:nodo}} para la combinación Sección+Plano(s)+UN(s) actual
+let prevPlanoSel=[]; // último estado de selección de Planograma (para exclusividad con TOTAL SURTIDO)
 
 function getSelectedValues(sel){ return [...sel.selectedOptions].map(o=>o.value); }
+
+// Si se tilda TOTAL SURTIDO junto con planogramas específicos, prevalece la última
+// acción del usuario: tildar TOTAL destilda el resto, y tildar un planograma específico
+// destilda TOTAL (son mutuamente excluyentes).
+function enforceTotalExclusive(){
+  const opts=[...selPlano.options];
+  const cur=opts.filter(o=>o.selected).map(o=>o.value);
+  const totalNow=cur.includes('__TOTAL__');
+  const totalBefore=prevPlanoSel.includes('__TOTAL__');
+  if(cur.length>1){
+    if(totalNow && !totalBefore){
+      opts.forEach(o=>{ if(o.value!=='__TOTAL__') o.selected=false; });
+    } else if(totalNow){
+      opts.forEach(o=>{ if(o.value==='__TOTAL__') o.selected=false; });
+    }
+  }
+  prevPlanoSel=opts.filter(o=>o.selected).map(o=>o.value);
+}
+selPlano.addEventListener('change', function(){
+  enforceTotalExclusive();
+  onPlanoChange();
+});
 const mainTitleEl=document.getElementById('mainTitle');
 const subTitleEl=document.getElementById('subTitle');
 const BASE_TITLE=mainTitleEl.textContent;
@@ -183,20 +226,48 @@ const BASE_SUBTITLE=subTitleEl.textContent;
 
 function populateSelectors(){
   selRegion.innerHTML='';
-  selPlano.innerHTML='';
   META.regions.forEach(r=>{const o=document.createElement('option');o.value=r;o.textContent=r;selRegion.appendChild(o);});
+  selSeccion.innerHTML='';
+  const oA=document.createElement('option');oA.value='';oA.textContent='— Todas —';selSeccion.appendChild(oA);
+  META.secciones.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;selSeccion.appendChild(o);});
+}
+
+// Filas vigentes según la Sección elegida (todas las filas si no hay Sección seleccionada)
+function getSeccionRows(){
+  const sec=selSeccion.value;
+  return sec ? ALLROWS.filter(r=>r[COL.SECCION]===sec) : ALLROWS;
+}
+
+// Al cambiar la Sección se reconstruye RAWROWS y la lista de Planogramas disponibles,
+// y se reinicia la selección a TOTAL SURTIDO (dispara el resto de la cadena de filtros).
+function onSeccionChange(){
+  if(!META) return;
+  const rows=getSeccionRows();
+  const byPlano=new Map();
+  rows.forEach(r=>{ const pl=r[COL.PLANOGRAMA]; if(!byPlano.has(pl)) byPlano.set(pl,[]); byPlano.get(pl).push(r); });
+  RAWROWS=Object.fromEntries(byPlano);
+  const planos=[...byPlano.keys()].sort();
+
+  selPlano.innerHTML='';
   const oT=document.createElement('option');oT.value='__TOTAL__';oT.textContent='— TOTAL SURTIDO —';selPlano.appendChild(oT);
-  META.planogramas.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;selPlano.appendChild(o);});
+  planos.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;selPlano.appendChild(o);});
+  oT.selected=true;
+  prevPlanoSel=['__TOTAL__'];
+
+  onPlanoChange();
 }
 
 function onPlanoChange(){
   if(!META) return;
-  const pl=selPlano.value;
+  const selPlanos=getSelectedValues(selPlano);
+  const isTotal=selPlanos.includes('__TOTAL__');
   selUN.innerHTML='';
-  if(pl!=='__TOTAL__')(D[pl]&&D[pl]._uns||[]).forEach(u=>{
-    const o=document.createElement('option');o.value=u;o.textContent=u;selUN.appendChild(o);
-  });
-  selUN.disabled=(pl==='__TOTAL__');
+  if(!isTotal && selPlanos.length){
+    const unSet=new Set();
+    selPlanos.forEach(pl=>{ (RAWROWS[pl]||[]).forEach(r=>unSet.add(r[COL.UN])); });
+    [...unSet].sort().forEach(u=>{const o=document.createElement('option');o.value=u;o.textContent=u;selUN.appendChild(o);});
+  }
+  selUN.disabled = isTotal || !selPlanos.length;
   populateMarcaOptions();
   recalcCurrentNode();
   render();
@@ -211,36 +282,39 @@ function onUNChange(){
 selUN.addEventListener('change', onUNChange);
 selMarca.addEventListener('change', buildBrandPanel);
 
-// Lista de marcas disponibles según el planograma y las UN seleccionadas (para el filtro Marca)
+// Lista de marcas disponibles según Sección + Planograma(s) + UN(s) seleccionadas (para el filtro Marca)
 function populateMarcaOptions(){
   selMarca.innerHTML='';
   if(!META) return;
-  const pl=selPlano.value;
+  const selPlanos=getSelectedValues(selPlano);
+  const isTotal=selPlanos.includes('__TOTAL__');
   let rows;
-  if(pl==='__TOTAL__'){ rows=ALLROWS; }
+  if(isTotal || !selPlanos.length){ rows=getSeccionRows(); }
   else{
-    const prows=RAWROWS[pl]||[];
+    const combined=selPlanos.reduce((a,pl)=>a.concat(RAWROWS[pl]||[]),[]);
     const selUNs=getSelectedValues(selUN);
-    rows=selUNs.length?prows.filter(r=>selUNs.includes(r[2])):prows;
+    rows=selUNs.length?combined.filter(r=>selUNs.includes(r[COL.UN])):combined;
   }
-  const marcas=[...new Set(rows.map(r=>r[5]))].sort();
+  const marcas=[...new Set(rows.map(r=>r[COL.MARCA]))].sort();
   marcas.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;selMarca.appendChild(o);});
 }
 
-// Recalcula el mapa {rango:{region:nodo}} vigente según Planograma + UN seleccionadas.
-// Si no hay UN seleccionadas se usa el agregado __ALL__ (igual que antes); si hay una o más,
-// se combinan (recalculan) las filas de esas UN, agrupando por su RANGO_UN (col 21).
+// Recalcula el mapa {rango:{region:nodo}} vigente según Sección + Planograma(s) + UN(s) seleccionadas.
+// Siempre se recombinan dinámicamente las filas filtradas (mismo patrón ya usado para UN),
+// agrupando por RANGO a nivel planograma (col 21) si no hay UN elegidas, o por RANGO_UN (col 22)
+// si hay una o más UN seleccionadas.
 function recalcCurrentNode(){
   if(!META){ currentNodeMap=null; return; }
-  const pl=selPlano.value;
-  if(pl==='__TOTAL__'){ currentNodeMap=DTOT['__ALL__']; return; }
-  const selUNs=getSelectedValues(selUN);
-  if(!selUNs.length){ currentNodeMap=(D[pl]&&D[pl]['__ALL__'])||null; return; }
-  const prows=RAWROWS[pl]||[];
-  const filtered=prows.filter(r=>selUNs.includes(r[2]));
+  const selPlanos=getSelectedValues(selPlano);
+  if(!selPlanos.length){ currentNodeMap=null; return; }
+  const isTotal=selPlanos.includes('__TOTAL__');
+  const baseRows = isTotal ? getSeccionRows() : selPlanos.reduce((a,pl)=>a.concat(RAWROWS[pl]||[]),[]);
+  const selUNs = isTotal ? [] : getSelectedValues(selUN);
+  const filtered = selUNs.length ? baseRows.filter(r=>selUNs.includes(r[COL.UN])) : baseRows;
+  const rangoCol = selUNs.length ? COL.RANGO_UN : COL.RANGO;
   const out={};
   RANGOS.forEach(rango=>{
-    const segRows=filtered.filter(r=>r[21]===rango);
+    const segRows=filtered.filter(r=>r[rangoCol]===rango);
     if(segRows.length) out[rango]=buildSegRegionMap(segRows);
   });
   currentNodeMap=out;
@@ -318,7 +392,7 @@ function lblCell(rango,region,side,minH){
 function render(){
   if(!META) return;
   const region=selRegion.value;
-  const isTot=selPlano.value==='__TOTAL__';
+  const isTot=getSelectedValues(selPlano).includes('__TOTAL__');
   const regionLabel=isTot?region+' · Total Surtido':region;
   const lbl={imp:'$ seg.',uni:'uni seg.',ean:'EANs seg.'};
 
@@ -416,9 +490,16 @@ window.addEventListener('resize',()=>{ if(META) render(); });
 // ============================================================
 // Carga y parseo del Excel (reemplaza los datos hardcodeados)
 // ============================================================
-const REGION_BASE = {'TOTAL NACIONAL':22,'NOA':34,'LITORAL':46,'CUYO':58,'CORDOBA':70,'BS AS':82,'PATAGONIA':94};
+// Cada región ocupa un bloque de 12 columnas consecutivas (r[b], r[b+3], r[b+6], r[b+9]).
+// REGION_BASE_START = columna de 'TOTAL NACIONAL'; el resto se calcula sumando el ancho
+// del bloque (REGION_STEP) — así, si se inserta una columna antes de estos bloques, sólo
+// hay que tocar REGION_BASE_START (o COL, arriba) y no cada número por separado.
+const REGION_BASE_START = 23;
+const REGION_STEP = 12;
 const SUBREGIONS  = ['NOA','LITORAL','CUYO','CORDOBA','BS AS','PATAGONIA'];
 const REGIONS_ALL = ['TOTAL NACIONAL'].concat(SUBREGIONS);
+const REGION_BASE = {};
+REGIONS_ALL.forEach((region,i)=>{ REGION_BASE[region] = REGION_BASE_START + i*REGION_STEP; });
 
 function num(v){ const n=parseFloat(v); return isNaN(n)?0:n; }
 function round2(v){ return Math.round(v*100)/100; }
@@ -443,7 +524,7 @@ function buildNode(rowsArr, region){
 
   const byMarca = new Map();
   active.forEach(r=>{
-    const m = r[5];
+    const m = r[COL.MARCA];
     if(!byMarca.has(m)) byMarca.set(m, []);
     byMarca.get(m).push(r);
   });
@@ -478,7 +559,7 @@ function buildNode(rowsArr, region){
     // mr/cr: cantidad de regiones (de las 6 sub-regiones) en las que la marca tiene
     // alguna venta MDO/CRF, calculado sobre TODAS las filas del segmento (no solo las activas
     // en la región actual) — por eso el valor es constante entre vistas de región.
-    const allBrandRows = rowsArr.filter(r=>r[5]===mname);
+    const allBrandRows = rowsArr.filter(r=>r[COL.MARCA]===mname);
     const mr = SUBREGIONS.filter(sr=>allBrandRows.some(r=>num(r[REGION_BASE[sr]+9])>0)).length;
     const cr = SUBREGIONS.filter(sr=>allBrandRows.some(r=>num(r[REGION_BASE[sr]+3])>0)).length;
 
@@ -514,77 +595,26 @@ function parseWorkbook(wb){
 
   const allRows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
   // Las primeras 3 filas son encabezados (igual que en Participacion_Barras.html)
-  const dataRows = allRows.slice(3).filter(r=>r[1] && r[2] && r[5]);
+  // Layout de columnas: ver constante COL al inicio del script.
+  const dataRows = allRows.slice(3).filter(r=>r[COL.PLANOGRAMA] && r[COL.UN] && r[COL.MARCA]);
   if(!dataRows.length){ setStatus('\u2717 No se encontraron datos en la hoja Export', false); return; }
 
   dataRows.forEach(r=>{
-    r[1] = String(r[1]).trim();
-    r[2] = String(r[2]).trim();
-    r[5] = String(r[5]).trim();
-    r[20] = String(r[20]||'').trim();
-    r[21] = String(r[21]||'').trim();
+    r[COL.SECCION]    = String(r[COL.SECCION]||'').trim();
+    r[COL.PLANOGRAMA] = String(r[COL.PLANOGRAMA]).trim();
+    r[COL.UN]         = String(r[COL.UN]).trim();
+    r[COL.MARCA]      = String(r[COL.MARCA]).trim();
+    r[COL.RANGO]      = String(r[COL.RANGO]||'').trim();
+    r[COL.RANGO_UN]   = String(r[COL.RANGO_UN]||'').trim();
   });
 
-  const byPlano = new Map();
-  dataRows.forEach(r=>{
-    if(!byPlano.has(r[1])) byPlano.set(r[1], []);
-    byPlano.get(r[1]).push(r);
-  });
-
-  const planogramas = [...byPlano.keys()].sort();
-  const newD = {};
-  const segRanges = {};
-
-  RAWROWS = Object.fromEntries(byPlano);
   ALLROWS = dataRows;
+  const secciones = [...new Set(dataRows.map(r=>r[COL.SECCION]).filter(Boolean))].sort();
 
-  planogramas.forEach(pl=>{
-    const prows = byPlano.get(pl);
-    const unsSet = new Set();
-    prows.forEach(r=>unsSet.add(r[2]));
-    const uns = [...unsSet].sort();
-
-    segRanges[pl] = {};
-    RANGOS.forEach(rango=>{
-      const inSeg = prows.filter(r=>r[20]===rango);
-      if(inSeg.length){
-        let mn=Infinity, mx=-Infinity;
-        inSeg.forEach(r=>{ const p=num(r[15]); if(p<mn)mn=p; if(p>mx)mx=p; });
-        segRanges[pl][rango] = {min:Math.round(mn), max:Math.round(mx)};
-      }
-    });
-
-    const planoNode = {_uns: uns};
-    planoNode['__ALL__'] = {};
-    RANGOS.forEach(rango=>{
-      const segRows = prows.filter(r=>r[20]===rango);
-      if(segRows.length) planoNode['__ALL__'][rango] = buildSegRegionMap(segRows);
-    });
-    uns.forEach(un=>{
-      const unRows = prows.filter(r=>r[2]===un);
-      const unNode = {};
-      RANGOS.forEach(rango=>{
-        const segRows = unRows.filter(r=>r[21]===rango);
-        if(segRows.length) unNode[rango] = buildSegRegionMap(segRows);
-      });
-      planoNode[un] = unNode;
-    });
-
-    newD[pl] = planoNode;
-  });
-
-  const newDTOT = {_uns:[], __ALL__:{}};
-  RANGOS.forEach(rango=>{
-    const segRows = dataRows.filter(r=>r[20]===rango);
-    if(segRows.length) newDTOT.__ALL__[rango] = buildSegRegionMap(segRows);
-  });
-
-  META = {regions: REGIONS_ALL.slice(), planogramas: planogramas, seg_ranges: segRanges};
-  D = newD;
-  DTOT = newDTOT;
+  META = {regions: REGIONS_ALL.slice(), secciones: secciones};
 
   populateSelectors();
-  onPlanoChange();
+  onSeccionChange();
 }
 
 document.getElementById('fileInput').addEventListener('change', function () {
