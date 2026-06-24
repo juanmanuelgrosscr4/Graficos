@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pirámide de Segmentación</title>
@@ -77,6 +78,13 @@ header span{font-size:12px;opacity:.75;display:block;margin-top:2px}
 .filt-btn.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
 .no-data{padding:20px;text-align:center;color:#94a3b8;font-size:12px}
 
+.rec-toolbar{display:flex;align-items:center;justify-content:space-between;padding:2px 4px;gap:12px}
+.rec-toolbar-title{font-size:12px;font-weight:700;color:#475569}
+.export-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap;transition:background .15s}
+.export-btn:hover{background:#15803d}
+.export-btn:disabled{background:#94a3b8;cursor:not-allowed;opacity:.75}
+.export-btn:disabled:hover{background:#94a3b8}
+
 .upload-btn {
   display: inline-flex;
   align-items: center;
@@ -96,9 +104,28 @@ header span{font-size:12px;opacity:.75;display:block;margin-top:2px}
 .upload-btn:hover { background: rgba(255,255,255,.28); }
 .file-status { font-size: 11px; color: rgba(255,255,255,.75); white-space: nowrap; }
 .file-status.loaded { color: #fff; font-weight: 600; }
+.processing-overlay {
+  position: fixed; inset: 0; background: rgba(15,23,42,.7);
+  display: none; align-items: center; justify-content: center;
+  flex-direction: column; gap: 14px; z-index: 9999;
+}
+.processing-overlay.show { display: flex; }
+.processing-spinner {
+  width: 48px; height: 48px; border: 5px solid rgba(255,255,255,.3);
+  border-top-color: #fff; border-radius: 50%;
+  animation: processing-spin .8s linear infinite;
+}
+.processing-overlay span {
+  color: #fff; font-size: 14px; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif;
+}
+@keyframes processing-spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
+<div class="processing-overlay" id="processingOverlay">
+  <div class="processing-spinner"></div>
+  <span>Aguarde un momento mientras se procesa el archivo</span>
+</div>
 <header>
   <div class="title-block">
     <h1 id="mainTitle">🔺 Pirámide de Segmentación — Carrefour</h1>
@@ -144,6 +171,10 @@ header span{font-size:12px;opacity:.75;display:block;margin-top:2px}
     <div class="pyr-header" id="pyr-header"></div>
     <div class="pyr-rows" id="pyr-rows"></div>
   </div>
+  <div class="rec-toolbar">
+    <span class="rec-toolbar-title">★ Recomendaciones por Segmento (marcas sin Carrefour con participación destacada)</span>
+    <button class="export-btn" id="btnExportRec" onclick="exportRecomendaciones()" disabled>&#11015; Exportar a Excel</button>
+  </div>
   <div class="brand-panel" id="brand-panel"></div>
 </div>
 <script>
@@ -153,13 +184,64 @@ header span{font-size:12px;opacity:.75;display:block;margin-top:2px}
 // valores (COL y REGION_BASE_START) en vez de buscar números sueltos en todo el script.
 // ============================================================
 const COL = {
-  SECCION:    1,  // columna B
-  PLANOGRAMA: 2,
-  UN:         3,
-  MARCA:      6,
-  RANGO:      21, // segmentación calculada a nivel planograma (sin UN)
-  RANGO_UN:   22, // segmentación calculada a nivel UN
+  EAN:         0,  // columna A
+  SECCION:     1,  // columna B
+  PLANOGRAMA:  2,
+  UN:          3,
+  DESCRIPCION: 4,
+  MARCA:       6,
+  CATEGORIA:   7,  // "Categoría Scentia"
+  RANGO:       21, // segmentación calculada a nivel planograma (sin UN)
+  RANGO_UN:    22, // segmentación calculada a nivel UN
 };
+
+// ============================================================
+// Validación de encabezados — lista de los 119 nombres de columna de la hoja "Export"
+// (fila índice 2 = 3ra fila de encabezado), capturada de la última versión conocida del
+// archivo. Si el Excel cargado no coincide exactamente (columna agregada/movida/renombrada),
+// se rechaza la carga en vez de leer datos de la posición equivocada silenciosamente.
+// Si el layout vuelve a cambiar legítimamente, regenerar este array desde el archivo nuevo
+// (y aplicar el mismo cambio en Participacion_Barras.html, que comparte esta misma hoja).
+// ============================================================
+const REGION_BLOCK_HEADERS = ['CRF $','%PG $','%UN $','CRF uni','%PG uni','%UN uni','MDO $','%PG $','%UN $','MDO uni','%PG uni','%UN uni'];
+const EXPECTED_HEADERS = [
+  'EAN','SECCIÓN','PLANOGRAMA','UN','DESCRIPCIÓN','FABRICANTE','MARCA','CATEGORÍA',
+  'CRF UNIDADES','CRF IMPORTE NETO','MDO UNIDADES','MDO IMPORTE NETO','MDO UNIDADES','MDO NETO',
+  'PLANO-MARCA','UN-MARCA','PRECIO','PRECIO PLANO','PRECIO UN','PRECIO PROMEDIO PLANO MARCA','PRECIO PROMEDIO UN MARCA',
+  'RANGO PLANOGRAMA','RANGO UN',
+]
+  .concat(REGION_BLOCK_HEADERS) // TOTAL NACIONAL
+  .concat(REGION_BLOCK_HEADERS) // NOA
+  .concat(REGION_BLOCK_HEADERS) // LITORAL
+  .concat(REGION_BLOCK_HEADERS) // CUYO
+  .concat(REGION_BLOCK_HEADERS) // CORDOBA
+  .concat(REGION_BLOCK_HEADERS) // BS AS
+  .concat(REGION_BLOCK_HEADERS) // PATAGONIA
+  .concat([
+    'YTD Share $ 2025','YTD Share $ 2026','YTD Dif Sh $',
+    'YTD Share VOL 2025','YTD Share VOL 2026','YTD Dif Sh VOL',
+    'YTD % Prog RM $','YTD % Prog CRF $','YTD GAP CRF vs RM $',
+    'YTD % Prog RM VOL','YTD % Prog CRF VOL','YTD GAP CRF vs RM VOL',
+  ]);
+
+// Compara la fila de encabezados real (allRows[2]) contra EXPECTED_HEADERS, columna por
+// columna (recortando espacios). Devuelve un array de strings describiendo cada diferencia;
+// vacío si coincide. Usar contra los datos crudos de sheet_to_json({header:1}).
+function validarColumnas(allRows){
+  const headerRow = allRows[2] || [];
+  const errores = [];
+  const n = Math.max(EXPECTED_HEADERS.length, headerRow.length);
+  for(let i=0;i<n;i++){
+    const esperado = EXPECTED_HEADERS[i];
+    const real = String(headerRow[i]==null?'':headerRow[i]).trim();
+    if(esperado===undefined){
+      errores.push(`Columna ${i+1}: columna inesperada "${real}"`);
+    } else if(real!==esperado){
+      errores.push(`Columna ${i+1}: se esperaba "${esperado}" y se encontró "${real||'(vacío)'}"`);
+    }
+  }
+  return errores;
+}
 
 let META=null;
 const RANGOS=['BAJO','MEDIO','ALTO','ALTA GAMA'];
@@ -479,6 +561,181 @@ function buildBrandPanel(){
     html+='</div></div>';
   });
   document.getElementById('brand-panel').innerHTML=html;
+  updateExportButtonState();
+}
+
+// Participación de una marca dentro de TODO el planograma (los 4 rangos sumados), para una
+// región dada — a diferencia de mk.pi/mk.pu (participación sólo dentro de SU rango). Usa el
+// mismo criterio de métrica (Importe/Unidades) que el resto del dashboard. Devuelve una
+// fracción 0..1 (no un % 0..100). Sólo se usa en el export de recomendaciones.
+function getPlanogramaShare(marcaName, region){
+  let brandAgg=0, totalAgg=0;
+  RANGOS.forEach(rango=>{
+    const d=getSeg(rango,region);
+    if(!d) return;
+    totalAgg += metric==='uni' ? (d.cu+d.du) : (d.ci+d.di);
+    const mk=(d.marcas||[]).find(x=>x.m===marcaName);
+    if(mk) brandAgg += metric==='uni' ? (mk.bcu+mk.bdu) : (mk.bci+mk.bdi);
+  });
+  return totalAgg>0 ? brandAgg/totalAgg : 0;
+}
+
+// Habilita el botón "Exportar a Excel" sólo si hay al menos una marca recomendada (★ Rec) en
+// algún segmento, para la Región y el filtro de Marca actualmente seleccionados — mismo
+// criterio que usa exportRecomendaciones() para decidir qué incluir en el archivo.
+function hasAnyRecommendation(){
+  if(!currentNodeMap) return false;
+  const region=selRegion.value;
+  const selMarcas=getSelectedValues(selMarca);
+  return RANGOS.some(rango=>{
+    const d=getSeg(rango,region);
+    if(!d||!d.marcas) return false;
+    const ms=selMarcas.length?d.marcas.filter(x=>selMarcas.includes(x.m)):d.marcas;
+    return ms.some(x=>x.r===1);
+  });
+}
+function updateExportButtonState(){
+  const btn=document.getElementById('btnExportRec');
+  if(btn) btn.disabled=!hasAnyRecommendation();
+}
+
+// Exporta a Excel las marcas recomendadas (★ Rec: sin Carrefour y con participación >=3%)
+// de los 4 segmentos, para la Región y el filtro de Marca actualmente seleccionados.
+// Una fila por EAN (no por marca): Descripción/Sección/Planograma/UN/Categoría Scentia son
+// atributos propios de ese EAN; "Participación en el Segmento", "Participación en el
+// Planograma" y "Precio Promedio MDO" son valores a nivel marca (se repiten en cada EAN de esa
+// marca). Hay dos cruces EAN×región, 0% si no participa: las 7 columnas REGIONS_ALL son la
+// participación del EAN dentro de SU SEGMENTO (rango) en esa región (CRF$+MDO$ del EAN /
+// CRF$+MDO$ del segmento completo en esa región); las 7 columnas "Planograma - <región>" son
+// la participación de la MARCA (no del EAN puntual) dentro de TODO el planograma (los 4 rangos
+// sumados) en esa región — ver getPlanogramaShare(). Todas las columnas van centradas salvo los
+// valores de Descripción, alineados a la izquierda (requiere xlsx-js-style, el fork de SheetJS
+// cargado en <head> que sí escribe estilos de celda en el .xlsx generado).
+function exportRecomendaciones(){
+  if(!META || !currentNodeMap){ alert('Cargá un Excel primero.'); return; }
+  const region=selRegion.value;
+  const selMarcas=getSelectedValues(selMarca);
+  const out=[];
+  RANGOS.forEach(rango=>{
+    const d=getSeg(rango,region);
+    if(!d||!d.marcas) return;
+    // Totales de segmento (CRF$+MDO$) por región (TOTAL NACIONAL + las 6 sub-regiones),
+    // denominador de la participación de cada EAN.
+    const regionTotals={};
+    REGIONS_ALL.forEach(sr=>{
+      const dr=getSeg(rango,sr);
+      regionTotals[sr]=dr?(dr.ci+dr.di):0;
+    });
+    let ms=selMarcas.length?d.marcas.filter(x=>selMarcas.includes(x.m)):d.marcas;
+    ms=ms.filter(x=>x.r===1); // sólo recomendadas, sin importar el filtro de columna (Todas/1 región/etc.)
+    ms.forEach(mk=>{
+      const pct=metric==='uni'?mk.pu:mk.pi;
+      // Participación de la MARCA dentro de todo el planograma: un valor para la región
+      // actualmente seleccionada y un valor por cada una de las 7 regiones (REGIONS_ALL).
+      // Es constante por marca (no por EAN), así que se calcula una sola vez acá afuera del
+      // loop de EANs en vez de recalcularlo por cada fila.
+      const planogramaPct = getPlanogramaShare(mk.m, region);
+      const planogramaByRegion = {};
+      REGIONS_ALL.forEach(sr=>{ planogramaByRegion[sr]=getPlanogramaShare(mk.m, sr); });
+      (mk.brows||[]).forEach(row=>{
+        const eanRaw=row[COL.EAN];
+        const record={
+          EAN: (eanRaw===''||eanRaw==null)?'':num(eanRaw),
+          'Descripción': row[COL.DESCRIPCION]||'',
+          'Sección': row[COL.SECCION]||'',
+          'Planograma': row[COL.PLANOGRAMA]||'',
+          'UN': row[COL.UN]||'',
+          'Categoría Scentia': row[COL.CATEGORIA]||'',
+          Marca: mk.m,
+          'Precio Promedio MDO': mk.ppm,
+          Segmento: rango,
+          'Participación en el Segmento': pct/100,
+          'Part. en el Planograma': planogramaPct,
+        };
+        REGIONS_ALL.forEach(sr=>{
+          const b=REGION_BASE[sr];
+          const eanImp=num(row[b])+num(row[b+6]); // CRF$ + MDO$ de este EAN en esa región
+          const tot=regionTotals[sr];
+          record[sr]=tot>0?eanImp/tot:0;
+        });
+        REGIONS_ALL.forEach(sr=>{ record['Planograma - '+sr]=planogramaByRegion[sr]; });
+        out.push(record);
+      });
+    });
+  });
+  if(!out.length){ alert('No hay marcas recomendadas para exportar con los filtros actuales.'); return; }
+
+  const headers=['EAN','Descripción','Sección','Planograma','UN','Categoría Scentia','Marca','Precio Promedio MDO','Segmento',
+                 'Participación en el Segmento']
+                .concat(REGIONS_ALL)
+                .concat(['Part. en el Planograma'])
+                .concat(REGIONS_ALL.map(sr=>'Planograma - '+sr));
+  const ws=XLSX.utils.json_to_sheet(out,{header:headers});
+
+  // Índices de columna (0-based) según el orden de "headers" arriba.
+  // REGIONS_ALL = ['TOTAL NACIONAL', ...SUBREGIONS] → 7 columnas para el cruce EAN×región
+  // (participación en el segmento), luego "Part. en el Planograma" y otras 7 para el cruce
+  // marca×región (participación en el planograma).
+  const C_EAN=0, C_DESC=1, C_PRECIO=7, C_PART=9;
+  const REGION_START=10, C_PART_PLANO=REGION_START+REGIONS_ALL.length;
+  const PLANO_REGION_START=C_PART_PLANO+1;
+  const pctCols=[C_PART, C_PART_PLANO]
+    .concat(REGIONS_ALL.map((_,i)=>REGION_START+i))
+    .concat(REGIONS_ALL.map((_,i)=>PLANO_REGION_START+i));
+
+  // Texto tal como se ve la celda ya formateada (según su numFmt), para poder calcular el
+  // ancho "AutoFit" de cada columna igual que lo haría Excel con Cells.EntireColumn.AutoFit.
+  function celdaComoTexto(cell){
+    if(!cell) return '';
+    if(cell.t==='n'){
+      if(cell.z==='"$"#,##0.00') return '$' + cell.v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+      if(cell.z==='0.00%') return (cell.v*100).toFixed(2)+'%';
+      if(cell.z==='0') return String(Math.round(cell.v));
+      return String(cell.v);
+    }
+    return String(cell.v==null?'':cell.v);
+  }
+
+  // Formato de celdas: EAN entero sin decimales, precio con separador de miles, porcentajes
+  // (Participación + las 7 columnas de región) como % real de Excel, alineación (todo
+  // centrado salvo Descripción, a la izquierda), y estilo del encabezado (fondo celeste,
+  // negrita, fuente tamaño 8).
+  const range=XLSX.utils.decode_range(ws['!ref']);
+  for(let R=range.s.r;R<=range.e.r;R++){
+    for(let C=range.s.c;C<=range.e.c;C++){
+      const cell=ws[XLSX.utils.encode_cell({r:R,c:C})];
+      if(!cell) continue;
+      if(R>0){
+        if(C===C_EAN && cell.t==='n'){ cell.z='0'; }
+        else if(C===C_PRECIO){ cell.t='n'; cell.z='"$"#,##0.00'; }
+        else if(pctCols.includes(C)){ cell.t='n'; cell.z='0.00%'; }
+      }
+      const horizontal=(R>0 && C===C_DESC)?'left':'center';
+      cell.s=Object.assign({},cell.s,{
+        alignment:{horizontal:horizontal,vertical:'center'},
+      },R===0?{fill:{fgColor:{rgb:'B8CCE4'}},font:{bold:true,sz:8}}:{});
+    }
+  }
+
+  // Ancho de columna = longitud del valor más largo de esa columna (encabezado o datos, ya
+  // formateado), equivalente a Cells.Select / Cells.EntireColumn.AutoFit.
+  const colWidths=[];
+  for(let C=range.s.c;C<=range.e.c;C++){
+    let maxLen=0;
+    for(let R=range.s.r;R<=range.e.r;R++){
+      maxLen=Math.max(maxLen, celdaComoTexto(ws[XLSX.utils.encode_cell({r:R,c:C})]).length);
+    }
+    colWidths.push({wch:maxLen+2});
+  }
+  ws['!cols']=colWidths;
+
+  // Autofiltro (desplegables de filtro/orden) sobre todo el rango exportado.
+  ws['!autofilter']={ref:ws['!ref']};
+
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Recomendaciones');
+  const regionSlug=region.replace(/\s+/g,'_');
+  XLSX.writeFile(wb,`Recomendaciones_${regionSlug}.xlsx`);
 }
 
 document.getElementById('pyr-rows').innerHTML =
@@ -559,12 +816,20 @@ function buildNode(rowsArr, region){
     // mr/cr: cantidad de regiones (de las 6 sub-regiones) en las que la marca tiene
     // alguna venta MDO/CRF, calculado sobre TODAS las filas del segmento (no solo las activas
     // en la región actual) — por eso el valor es constante entre vistas de región.
+    // mrNames: mismo conjunto pero con los nombres (no solo el conteo) — usado en el export
+    // de recomendaciones ("Regiones en las que participa"). brows: filas crudas de esta marca
+    // activas en la región/rango actual — usado en el export para listar EAN por EAN.
     const allBrandRows = rowsArr.filter(r=>r[COL.MARCA]===mname);
-    const mr = SUBREGIONS.filter(sr=>allBrandRows.some(r=>num(r[REGION_BASE[sr]+9])>0)).length;
+    const mrNames = SUBREGIONS.filter(sr=>allBrandRows.some(r=>num(r[REGION_BASE[sr]+9])>0));
     const cr = SUBREGIONS.filter(sr=>allBrandRows.some(r=>num(r[REGION_BASE[sr]+3])>0)).length;
+    const mr = mrNames.length;
 
     marcas.push({m:mname, pi:round2(piRaw), pu:round2(puRaw), c:c, r:rf, pp:pp, ppc:ppc, ppm:ppm,
-                 et:bet, e2:e2, ec:bec, em:bem, mr:mr, cr:cr});
+                 et:bet, e2:e2, ec:bec, em:bem, mr:mr, cr:cr, mrNames:mrNames, brows:brows,
+                 // $ y unidades crudas (CRF/MDO) de esta marca en este rango+región — sin
+                 // redondear ni convertir a %, para poder sumarlas entre los 4 rangos y obtener
+                 // la participación de la marca a nivel PLANOGRAMA (ver getPlanogramaShare()).
+                 bci:bci, bcu:bcu, bdi:bdi, bdu:bdu});
   });
   marcas.sort((a,b)=>b.pi-a.pi);
 
@@ -584,54 +849,160 @@ function buildSegRegionMap(rowsArr){
   return out;
 }
 
-function parseWorkbook(wb){
-  const ws = wb.Sheets['Export'];
-  if(!ws){ setStatus('\u2717 No se encontr\u00f3 la hoja "Export"', false); return; }
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// WORKER: parseo pesado del Excel en un hilo aparte
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// XLSX.read() (parseo binario) y sheet_to_json() de un archivo grande pueden bloquear el
+// hilo principal varios segundos. Mostrar el spinner antes de empezar NO evita el cartel
+// de Chrome "La p\u00e1gina no responde": ese cartel depende de que el hilo principal est\u00e9
+// bloqueado, no de si hubo feedback visual previo. La \u00fanica forma confiable de evitarlo es
+// que el parseo corra en un Web Worker (hilo aparte): el hilo principal queda libre y el
+// navegador nunca lo considera "no responde".
+const PARSE_WORKER_SRC = `
+self.importScripts('https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js');
 
-  const a1 = ws['A1'] ? String(ws['A1'].v).trim() : '';
-  const b1 = ws['B1'] ? String(ws['B1'].v).trim() : '';
-  mainTitleEl.textContent = b1 ? `${BASE_TITLE} ${b1}` : BASE_TITLE;
-  subTitleEl.textContent = a1 ? `${a1} ${BASE_SUBTITLE}` : BASE_SUBTITLE;
-
-  const allRows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-  // Las primeras 3 filas son encabezados (igual que en Participacion_Barras.html)
-  // Layout de columnas: ver constante COL al inicio del script.
-  const dataRows = allRows.slice(3).filter(r=>r[COL.PLANOGRAMA] && r[COL.UN] && r[COL.MARCA]);
-  if(!dataRows.length){ setStatus('\u2717 No se encontraron datos en la hoja Export', false); return; }
-
-  dataRows.forEach(r=>{
-    r[COL.SECCION]    = String(r[COL.SECCION]||'').trim();
-    r[COL.PLANOGRAMA] = String(r[COL.PLANOGRAMA]).trim();
-    r[COL.UN]         = String(r[COL.UN]).trim();
-    r[COL.MARCA]      = String(r[COL.MARCA]).trim();
-    r[COL.RANGO]      = String(r[COL.RANGO]||'').trim();
-    r[COL.RANGO_UN]   = String(r[COL.RANGO_UN]||'').trim();
-  });
-
-  ALLROWS = dataRows;
-  const secciones = [...new Set(dataRows.map(r=>r[COL.SECCION]).filter(Boolean))].sort();
-
-  META = {regions: REGIONS_ALL.slice(), secciones: secciones};
-
-  populateSelectors();
-  onSeccionChange();
+const COL = {
+  EAN: 0, SECCION: 1, PLANOGRAMA: 2, UN: 3, DESCRIPCION: 4, MARCA: 6, CATEGORIA: 7,
+  RANGO: 21, RANGO_UN: 22,
+};
+const REGION_BLOCK_HEADERS = ['CRF $','%PG $','%UN $','CRF uni','%PG uni','%UN uni','MDO $','%PG $','%UN $','MDO uni','%PG uni','%UN uni'];
+const EXPECTED_HEADERS = [
+  'EAN','SECCI\u00d3N','PLANOGRAMA','UN','DESCRIPCI\u00d3N','FABRICANTE','MARCA','CATEGOR\u00cdA',
+  'CRF UNIDADES','CRF IMPORTE NETO','MDO UNIDADES','MDO IMPORTE NETO','MDO UNIDADES','MDO NETO',
+  'PLANO-MARCA','UN-MARCA','PRECIO','PRECIO PLANO','PRECIO UN','PRECIO PROMEDIO PLANO MARCA','PRECIO PROMEDIO UN MARCA',
+  'RANGO PLANOGRAMA','RANGO UN',
+]
+  .concat(REGION_BLOCK_HEADERS).concat(REGION_BLOCK_HEADERS).concat(REGION_BLOCK_HEADERS)
+  .concat(REGION_BLOCK_HEADERS).concat(REGION_BLOCK_HEADERS).concat(REGION_BLOCK_HEADERS)
+  .concat(REGION_BLOCK_HEADERS)
+  .concat([
+    'YTD Share $ 2025','YTD Share $ 2026','YTD Dif Sh $',
+    'YTD Share VOL 2025','YTD Share VOL 2026','YTD Dif Sh VOL',
+    'YTD % Prog RM $','YTD % Prog CRF $','YTD GAP CRF vs RM $',
+    'YTD % Prog RM VOL','YTD % Prog CRF VOL','YTD GAP CRF vs RM VOL',
+  ]);
+function validarColumnas(allRows){
+  const headerRow = allRows[2] || [];
+  const errores = [];
+  const n = Math.max(EXPECTED_HEADERS.length, headerRow.length);
+  for(let i=0;i<n;i++){
+    const esperado = EXPECTED_HEADERS[i];
+    const real = String(headerRow[i]==null?'':headerRow[i]).trim();
+    if(esperado===undefined){
+      errores.push('Columna ' + (i+1) + ': columna inesperada "' + real + '"');
+    } else if(real!==esperado){
+      errores.push('Columna ' + (i+1) + ': se esperaba "' + esperado + '" y se encontr\u00f3 "' + (real||'(vac\u00edo)') + '"');
+    }
+  }
+  return errores;
 }
+
+self.onmessage = function (e) {
+  try {
+    const wb = XLSX.read(new Uint8Array(e.data), { type: 'array' });
+    const ws = wb.Sheets['Export'];
+    if (!ws) { self.postMessage({ ok: false, fatal: true, message: 'No se encontr\u00f3 la hoja "Export"' }); return; }
+
+    const a1 = ws['A1'] ? String(ws['A1'].v).trim() : '';
+    const b1 = ws['B1'] ? String(ws['B1'].v).trim() : '';
+    const allRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+    const errores = validarColumnas(allRows);
+    if (errores.length) { self.postMessage({ ok: false, fatal: false, errores: errores }); return; }
+
+    const dataRows = allRows.slice(3).filter((r) => r[COL.PLANOGRAMA] && r[COL.UN] && r[COL.MARCA]);
+    if (!dataRows.length) { self.postMessage({ ok: false, fatal: true, message: 'No se encontraron datos en la hoja Export' }); return; }
+
+    dataRows.forEach((r) => {
+      r[COL.SECCION]    = String(r[COL.SECCION]||'').trim();
+      r[COL.PLANOGRAMA] = String(r[COL.PLANOGRAMA]).trim();
+      r[COL.UN]         = String(r[COL.UN]).trim();
+      r[COL.MARCA]      = String(r[COL.MARCA]).trim();
+      r[COL.RANGO]      = String(r[COL.RANGO]||'').trim();
+      r[COL.RANGO_UN]   = String(r[COL.RANGO_UN]||'').trim();
+    });
+
+    const secciones = [...new Set(dataRows.map((r) => r[COL.SECCION]).filter(Boolean))].sort();
+
+    self.postMessage({ ok: true, dataRows: dataRows, secciones: secciones, a1: a1, b1: b1 });
+  } catch (err) {
+    self.postMessage({ ok: false, fatal: true, message: err.message });
+  }
+};
+`;
+
+let parseWorker = null;
+function getParseWorker() {
+  if (!parseWorker) {
+    const blob = new Blob([PARSE_WORKER_SRC], { type: 'application/javascript' });
+    parseWorker = new Worker(URL.createObjectURL(blob));
+  }
+  return parseWorker;
+}
+
+function showProcessingOverlay() {
+  const el = document.getElementById('processingOverlay');
+  if (el) el.classList.add('show');
+}
+function hideProcessingOverlay() {
+  const el = document.getElementById('processingOverlay');
+  if (el) el.classList.remove('show');
+}
+
+let pendingFileName = '';
 
 document.getElementById('fileInput').addEventListener('change', function () {
   const file = this.files[0];
   if (!file) return;
+  pendingFileName = file.name;
   setStatus('Procesando...', false);
+  showProcessingOverlay();
+
   const reader = new FileReader();
   reader.onload = function (e) {
+    let worker;
     try {
-      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-      parseWorkbook(wb);
-      setStatus('\u2713 ' + file.name, true);
+      worker = getParseWorker();
     } catch (err) {
+      hideProcessingOverlay();
       setStatus('\u2717 Error al procesar: ' + err.message, false);
+      return;
     }
+    worker.onmessage = function (ev) {
+      hideProcessingOverlay();
+      const data = ev.data;
+      if (!data.ok) {
+        if (data.fatal) {
+          setStatus('\u2717 Error al procesar: ' + (data.message || 'archivo inv\u00e1lido'), false);
+        } else {
+          setStatus('\u2717 El archivo no coincide con el formato esperado', false);
+          console.warn('Diferencias de columnas detectadas en la hoja "Export":\n' + data.errores.join('\n'));
+          if (window.Swal) {
+            Swal.fire({ icon: 'warning', title: 'El archivo seleccionado no es correcto' });
+          } else {
+            alert('El archivo seleccionado no es correcto');
+          }
+        }
+        return;
+      }
+
+      mainTitleEl.textContent = data.b1 ? `${BASE_TITLE} ${data.b1}` : BASE_TITLE;
+      subTitleEl.textContent = data.a1 ? `${data.a1} ${BASE_SUBTITLE}` : BASE_SUBTITLE;
+
+      ALLROWS = data.dataRows;
+      META = { regions: REGIONS_ALL.slice(), secciones: data.secciones };
+
+      populateSelectors();
+      onSeccionChange();
+      setStatus('\u2713 ' + pendingFileName, true);
+    };
+    worker.onerror = function (err) {
+      hideProcessingOverlay();
+      setStatus('\u2717 Error al procesar: ' + err.message, false);
+    };
+    worker.postMessage(e.target.result, [e.target.result]);
   };
-  reader.onerror = () => setStatus('\u2717 Error al leer el archivo', false);
+  reader.onerror = () => { setStatus('\u2717 Error al leer el archivo', false); hideProcessingOverlay(); };
   reader.readAsArrayBuffer(file);
 });
 function setStatus(msg, ok) {

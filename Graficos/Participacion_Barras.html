@@ -5,8 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Participación</title>
   <link rel="icon" href="../favicon.ico" type="image/x-icon">
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- xlsx-js-style (no xlsx@0.18.5 plano): el export de Participación necesita escribir
+       estilos de celda (centrado) en el .xlsx generado, algo que la edición community de
+       SheetJS ignora silenciosamente al guardar. El worker de parseo (más abajo) sigue usando
+       xlsx@0.18.5 vía su propio importScripts, así que esto no lo afecta. -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -67,6 +72,11 @@
       border: 1px solid rgba(255,255,255,.4);
     }
     .upload-btn:hover { background: rgba(255,255,255,.28); }
+
+    .export-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap;transition:background .15s}
+    .export-btn:hover{background:#15803d}
+    .export-btn:disabled{background:#94a3b8;cursor:not-allowed;opacity:.75}
+    .export-btn:disabled:hover{background:#94a3b8}
 
     /* ── FILTERS ── */
     .filters-bar {
@@ -177,9 +187,29 @@
       color: #94a3b8;
       font-size: 13px;
     }
+    .processing-overlay {
+      position: fixed; inset: 0; background: rgba(15,23,42,.7);
+      display: none; align-items: center; justify-content: center;
+      flex-direction: column; gap: 14px; z-index: 9999;
+    }
+    .processing-overlay.show { display: flex; }
+    .processing-spinner {
+      width: 48px; height: 48px; border: 5px solid rgba(255,255,255,.3);
+      border-top-color: #fff; border-radius: 50%;
+      animation: processing-spin .8s linear infinite;
+    }
+    .processing-overlay span {
+      color: #fff; font-size: 14px; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif;
+    }
+    @keyframes processing-spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
+
+<div class="processing-overlay" id="processingOverlay">
+  <div class="processing-spinner"></div>
+  <span>Aguarde un momento mientras se procesa el archivo</span>
+</div>
 
 <!-- HEADER -->
 <header class="page-header">
@@ -235,6 +265,7 @@
     <span class="filter-label">Sección</span>
     <select id="seccionSel" style="min-width:130px;"></select>
   </div>
+  <button class="export-btn" id="btnExportPart" onclick="exportParticipacion()" disabled>&#11015; Exportar a Excel</button>
 </div>
 
 <!-- CHARTS -->
@@ -295,6 +326,54 @@ const COL = {
   YTD_GAP_CRF_RM_VOL:   118, // DO - YTD GAP CRF vs RM VOL
 };
 
+// ============================================================
+// Validación de encabezados — lista de los 119 nombres de columna de la hoja "Export"
+// (fila índice 2 = 3ra fila de encabezado), capturada de la última versión conocida del
+// archivo. Si el Excel cargado no coincide exactamente (columna agregada/movida/renombrada),
+// se rechaza la carga en vez de leer datos de la posición equivocada silenciosamente.
+// Si el layout vuelve a cambiar legítimamente, regenerar este array desde el archivo nuevo
+// (y aplicar el mismo cambio en Piramide_Segmentacion.html, que comparte esta misma hoja).
+// ============================================================
+const REGION_BLOCK_HEADERS = ['CRF $','%PG $','%UN $','CRF uni','%PG uni','%UN uni','MDO $','%PG $','%UN $','MDO uni','%PG uni','%UN uni'];
+const EXPECTED_HEADERS = [
+  'EAN','SECCIÓN','PLANOGRAMA','UN','DESCRIPCIÓN','FABRICANTE','MARCA','CATEGORÍA',
+  'CRF UNIDADES','CRF IMPORTE NETO','MDO UNIDADES','MDO IMPORTE NETO','MDO UNIDADES','MDO NETO',
+  'PLANO-MARCA','UN-MARCA','PRECIO','PRECIO PLANO','PRECIO UN','PRECIO PROMEDIO PLANO MARCA','PRECIO PROMEDIO UN MARCA',
+  'RANGO PLANOGRAMA','RANGO UN',
+]
+  .concat(REGION_BLOCK_HEADERS) // TOTAL NACIONAL
+  .concat(REGION_BLOCK_HEADERS) // NOA
+  .concat(REGION_BLOCK_HEADERS) // LITORAL
+  .concat(REGION_BLOCK_HEADERS) // CUYO
+  .concat(REGION_BLOCK_HEADERS) // CORDOBA
+  .concat(REGION_BLOCK_HEADERS) // BS AS
+  .concat(REGION_BLOCK_HEADERS) // PATAGONIA
+  .concat([
+    'YTD Share $ 2025','YTD Share $ 2026','YTD Dif Sh $',
+    'YTD Share VOL 2025','YTD Share VOL 2026','YTD Dif Sh VOL',
+    'YTD % Prog RM $','YTD % Prog CRF $','YTD GAP CRF vs RM $',
+    'YTD % Prog RM VOL','YTD % Prog CRF VOL','YTD GAP CRF vs RM VOL',
+  ]);
+
+// Compara la fila de encabezados real (rows[2]) contra EXPECTED_HEADERS, columna por columna
+// (recortando espacios). Devuelve un array de strings describiendo cada diferencia; vacío si
+// coincide. Usar contra los datos crudos de sheet_to_json({header:1}).
+function validarColumnas(allRows){
+  const headerRow = allRows[2] || [];
+  const errores = [];
+  const n = Math.max(EXPECTED_HEADERS.length, headerRow.length);
+  for(let i=0;i<n;i++){
+    const esperado = EXPECTED_HEADERS[i];
+    const real = String(headerRow[i]==null?'':headerRow[i]).trim();
+    if(esperado===undefined){
+      errores.push(`Columna ${i+1}: columna inesperada "${real}"`);
+    } else if(real!==esperado){
+      errores.push(`Columna ${i+1}: se esperaba "${esperado}" y se encontró "${real||'(vacío)'}"`);
+    }
+  }
+  return errores;
+}
+
 // Columna base de cada región (1-indexada, igual que el Python)
 const REGION_BASE_START = 24;
 const REGION_STEP = 12;
@@ -340,21 +419,193 @@ let sortUni = { col: 'crfPctUni', asc: true };
 const BASE_TITLE = document.getElementById('SpanTituloGraficos').textContent;
 const BASE_H1 = document.getElementById('mainTitle').textContent;
 
+function showProcessingOverlay() {
+  const el = document.getElementById('processingOverlay');
+  if (el) el.classList.add('show');
+}
+function hideProcessingOverlay() {
+  const el = document.getElementById('processingOverlay');
+  if (el) el.classList.remove('show');
+}
+
+// ══════════════════════════════════════════════════════════════
+// WORKER: parseo pesado del Excel en un hilo aparte
+// ══════════════════════════════════════════════════════════════
+// XLSX.read() (parseo binario) y sheet_to_json() de un archivo grande pueden bloquear el
+// hilo principal varios segundos. Mostrar el spinner antes de empezar NO evita el cartel
+// de Chrome "La página no responde": ese cartel depende de que el hilo principal esté
+// bloqueado, no de si hubo feedback visual previo. La única forma confiable de evitarlo es
+// que el parseo corra en un Web Worker (hilo aparte): el hilo principal queda libre y el
+// navegador nunca lo considera "no responde".
+const PARSE_WORKER_SRC = `
+self.importScripts('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+
+const COL = {
+  SECCION: 1, PLANOGRAMA: 2, UN: 3, MARCA: 6, CATEGORIA: 7,
+  YTD_SH_IMP_2026: 108, YTD_DIF_SH_IMP: 109, YTD_SH_VOL_2026: 111, YTD_DIF_SH_VOL: 112,
+  YTD_PCT_PROG_RM_IMP: 113, YTD_PCT_PROG_CRF_IMP: 114, YTD_GAP_CRF_RM_IMP: 115,
+  YTD_PCT_PROG_RM_VOL: 116, YTD_PCT_PROG_CRF_VOL: 117, YTD_GAP_CRF_RM_VOL: 118,
+};
+const REGION_BLOCK_HEADERS = ['CRF $','%PG $','%UN $','CRF uni','%PG uni','%UN uni','MDO $','%PG $','%UN $','MDO uni','%PG uni','%UN uni'];
+const EXPECTED_HEADERS = [
+  'EAN','SECCIÓN','PLANOGRAMA','UN','DESCRIPCIÓN','FABRICANTE','MARCA','CATEGORÍA',
+  'CRF UNIDADES','CRF IMPORTE NETO','MDO UNIDADES','MDO IMPORTE NETO','MDO UNIDADES','MDO NETO',
+  'PLANO-MARCA','UN-MARCA','PRECIO','PRECIO PLANO','PRECIO UN','PRECIO PROMEDIO PLANO MARCA','PRECIO PROMEDIO UN MARCA',
+  'RANGO PLANOGRAMA','RANGO UN',
+]
+  .concat(REGION_BLOCK_HEADERS).concat(REGION_BLOCK_HEADERS).concat(REGION_BLOCK_HEADERS)
+  .concat(REGION_BLOCK_HEADERS).concat(REGION_BLOCK_HEADERS).concat(REGION_BLOCK_HEADERS)
+  .concat(REGION_BLOCK_HEADERS)
+  .concat([
+    'YTD Share $ 2025','YTD Share $ 2026','YTD Dif Sh $',
+    'YTD Share VOL 2025','YTD Share VOL 2026','YTD Dif Sh VOL',
+    'YTD % Prog RM $','YTD % Prog CRF $','YTD GAP CRF vs RM $',
+    'YTD % Prog RM VOL','YTD % Prog CRF VOL','YTD GAP CRF vs RM VOL',
+  ]);
+function validarColumnas(allRows){
+  const headerRow = allRows[2] || [];
+  const errores = [];
+  const n = Math.max(EXPECTED_HEADERS.length, headerRow.length);
+  for(let i=0;i<n;i++){
+    const esperado = EXPECTED_HEADERS[i];
+    const real = String(headerRow[i]==null?'':headerRow[i]).trim();
+    if(esperado===undefined){
+      errores.push('Columna ' + (i+1) + ': columna inesperada "' + real + '"');
+    } else if(real!==esperado){
+      errores.push('Columna ' + (i+1) + ': se esperaba "' + esperado + '" y se encontró "' + (real||'(vacío)') + '"');
+    }
+  }
+  return errores;
+}
+const REGION_BASE_START = 24;
+const REGION_STEP = 12;
+const REGION_BASE = {};
+['TOTAL NACIONAL','NOA','LITORAL','CUYO','CÓRDOBA','BS AS','PATAGONIA'].forEach((region,i)=>{
+  REGION_BASE[region] = REGION_BASE_START + i*REGION_STEP;
+});
+const METRICAS = [
+  'CRF_IMP','CRF_PCT_PG_IMP','CRF_PCT_UN_IMP','CRF_UNI','CRF_PCT_PG_UNI','CRF_PCT_UN_UNI',
+  'MDO_IMP','MDO_PCT_PG_IMP','MDO_PCT_UN_IMP','MDO_UNI','MDO_PCT_PG_UNI','MDO_PCT_UN_UNI',
+];
+
+self.onmessage = function (e) {
+  try {
+    const wb = XLSX.read(new Uint8Array(e.data), { type: 'array' });
+    const ws = wb.Sheets['Export'];
+    if (!ws) { self.postMessage({ ok: false, fatal: true, message: 'No se encontró la hoja "Export"' }); return; }
+
+    const a1 = ws['A1'] ? String(ws['A1'].v || ws['A1'].w || '').trim() : '';
+    const b1 = ws['B1'] ? String(ws['B1'].v || ws['B1'].w || '').trim() : '';
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+    const errores = validarColumnas(rows);
+    if (errores.length) { self.postMessage({ ok: false, fatal: false, errores: errores }); return; }
+
+    const allData = [];
+    for (const row of rows.slice(3)) {
+      if (!row[COL.PLANOGRAMA] || !row[COL.UN] || !row[COL.MARCA]) continue;
+      const obj = {
+        SECCION:          String(row[COL.SECCION]    || '').trim(),
+        PLANOGRAMA:       String(row[COL.PLANOGRAMA]).trim(),
+        UN:               String(row[COL.UN]).trim(),
+        MARCA:            String(row[COL.MARCA]).trim(),
+        CATEGORIA:        String(row[COL.CATEGORIA]   || '').trim(),
+        YTD_SH_IMP_2026:  parseFloat(row[COL.YTD_SH_IMP_2026]) || 0,
+        YTD_DIF_SH_IMP:   parseFloat(row[COL.YTD_DIF_SH_IMP])  || 0,
+        YTD_SH_VOL_2026:  parseFloat(row[COL.YTD_SH_VOL_2026]) || 0,
+        YTD_DIF_SH_VOL:   parseFloat(row[COL.YTD_DIF_SH_VOL])  || 0,
+        YTD_PCT_PROG_RM_IMP:  parseFloat(row[COL.YTD_PCT_PROG_RM_IMP])  || 0,
+        YTD_PCT_PROG_CRF_IMP: parseFloat(row[COL.YTD_PCT_PROG_CRF_IMP]) || 0,
+        YTD_GAP_CRF_RM_IMP:   parseFloat(row[COL.YTD_GAP_CRF_RM_IMP])   || 0,
+        YTD_PCT_PROG_RM_VOL:  parseFloat(row[COL.YTD_PCT_PROG_RM_VOL])  || 0,
+        YTD_PCT_PROG_CRF_VOL: parseFloat(row[COL.YTD_PCT_PROG_CRF_VOL]) || 0,
+        YTD_GAP_CRF_RM_VOL:   parseFloat(row[COL.YTD_GAP_CRF_RM_VOL])   || 0,
+      };
+      Object.keys(REGION_BASE).forEach((region) => {
+        const start = REGION_BASE[region] - 1;
+        METRICAS.forEach((metrica, offset) => {
+          obj[region + '|' + metrica] = parseFloat(row[start + offset]) || 0;
+        });
+      });
+      allData.push(obj);
+    }
+    self.postMessage({ ok: true, allData: allData, a1: a1, b1: b1 });
+  } catch (err) {
+    self.postMessage({ ok: false, fatal: true, message: err.message });
+  }
+};
+`;
+
+let parseWorker = null;
+function getParseWorker() {
+  if (!parseWorker) {
+    const blob = new Blob([PARSE_WORKER_SRC], { type: 'application/javascript' });
+    parseWorker = new Worker(URL.createObjectURL(blob));
+  }
+  return parseWorker;
+}
+
+let pendingFileName = '';
+
 document.getElementById('fileInput').addEventListener('change', function () {
   const file = this.files[0];
   if (!file) return;
+  pendingFileName = file.name;
   setStatus('Procesando...', false);
+  showProcessingOverlay();
+
   const reader = new FileReader();
   reader.onload = function (e) {
+    let worker;
     try {
-      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-      parseWorkbook(wb);
-      setStatus('✓ ' + file.name, true);
+      worker = getParseWorker();
     } catch (err) {
+      hideProcessingOverlay();
       setStatus('✗ Error al procesar: ' + err.message, false);
+      return;
     }
+    worker.onmessage = function (ev) {
+      hideProcessingOverlay();
+      const data = ev.data;
+      if (!data.ok) {
+        if (data.fatal) {
+          setStatus('✗ Error al procesar: ' + (data.message || 'archivo inválido'), false);
+        } else {
+          setStatus('✗ El archivo no coincide con el formato esperado', false);
+          console.warn('Diferencias de columnas detectadas en la hoja "Export":\n' + data.errores.join('\n'));
+          if (window.Swal) {
+            Swal.fire({ icon: 'warning', title: 'El archivo seleccionado no es correcto' });
+          } else {
+            alert('El archivo seleccionado no es correcto');
+          }
+        }
+        return;
+      }
+
+      document.getElementById('mainTitle').textContent = data.b1 ? BASE_H1 + data.b1 : BASE_H1;
+      document.getElementById('SpanTituloGraficos').textContent = data.a1 ? data.a1 + " " + BASE_TITLE : BASE_TITLE;
+
+      allData = data.allData;
+      if (allData.length === 0) {
+        setStatus('✗ No se encontraron datos en la hoja Export', false);
+        return;
+      }
+
+      populateSeccionFilter();
+      populateRegionFilter();
+      populatePlanFilter();
+      resetChainedFilters(null);
+      updateViewBtnsAvailability();
+      renderCharts();
+      setStatus('✓ ' + pendingFileName, true);
+    };
+    worker.onerror = function (err) {
+      hideProcessingOverlay();
+      setStatus('✗ Error al procesar: ' + err.message, false);
+    };
+    worker.postMessage(e.target.result, [e.target.result]);
   };
-  reader.onerror = () => setStatus('✗ Error al leer el archivo', false);
+  reader.onerror = () => { setStatus('✗ Error al leer el archivo', false); hideProcessingOverlay(); };
   reader.readAsArrayBuffer(file);
 });
 
@@ -362,73 +613,6 @@ function setStatus(msg, ok) {
   const st = document.getElementById('fileStatus');
   st.textContent = msg;
   st.className = 'file-status' + (ok ? ' loaded' : '');
-}
-
-// ══════════════════════════════════════════════════════════════
-// PARSEO DEL EXCEL
-// ══════════════════════════════════════════════════════════════
-function parseWorkbook(wb) {
-  const ws   = wb.Sheets['Export'];
-  if (!ws) { setStatus('✗ No se encontró la hoja "Export"', false); return; }
-
-  // Leer A1 y B1 y concatenarlos al título / subtítulo (reseteando el texto base primero)
-  const a1 = ws['A1'] ? String(ws['A1'].v || ws['A1'].w || '').trim() : '';
-  const b1 = ws['B1'] ? String(ws['B1'].v || ws['B1'].w || '').trim() : '';
-  document.getElementById('mainTitle').textContent = b1 ? BASE_H1 + b1 : BASE_H1;
-  document.getElementById('SpanTituloGraficos').textContent = a1 ? a1 + " " + BASE_TITLE : BASE_TITLE;
-
-  // sheet_to_json con header:1 devuelve cada fila como array 0-indexado
-  // Python usa header=2 → las filas 0,1,2 son encabezados, los datos empiezan en índice 3
-  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-
-  allData = [];
-
-  for (const row of rows.slice(3)) {
-    // Filtrar filas vacías (equivalente al dropna del Python)
-    if (!row[COL.PLANOGRAMA] || !row[COL.UN] || !row[COL.MARCA]) continue;
-
-    const obj = {
-      SECCION:          String(row[COL.SECCION]    || '').trim(),
-      PLANOGRAMA:       String(row[COL.PLANOGRAMA]).trim(),
-      UN:               String(row[COL.UN]).trim(),
-      MARCA:            String(row[COL.MARCA]).trim(),
-      CATEGORIA:        String(row[COL.CATEGORIA]   || '').trim(),
-      YTD_SH_IMP_2026:  parseFloat(row[COL.YTD_SH_IMP_2026]) || 0,
-      YTD_DIF_SH_IMP:   parseFloat(row[COL.YTD_DIF_SH_IMP])  || 0,
-      YTD_SH_VOL_2026:  parseFloat(row[COL.YTD_SH_VOL_2026]) || 0,
-      YTD_DIF_SH_VOL:   parseFloat(row[COL.YTD_DIF_SH_VOL])  || 0,
-      YTD_PCT_PROG_RM_IMP:  parseFloat(row[COL.YTD_PCT_PROG_RM_IMP])  || 0,
-      YTD_PCT_PROG_CRF_IMP: parseFloat(row[COL.YTD_PCT_PROG_CRF_IMP]) || 0,
-      YTD_GAP_CRF_RM_IMP:   parseFloat(row[COL.YTD_GAP_CRF_RM_IMP])   || 0,
-      YTD_PCT_PROG_RM_VOL:  parseFloat(row[COL.YTD_PCT_PROG_RM_VOL])  || 0,
-      YTD_PCT_PROG_CRF_VOL: parseFloat(row[COL.YTD_PCT_PROG_CRF_VOL]) || 0,
-      YTD_GAP_CRF_RM_VOL:   parseFloat(row[COL.YTD_GAP_CRF_RM_VOL])   || 0,
-    };
-
-    // Para cada región, leer las 12 métricas
-    // En Python: base + offset - 1  (base es 1-indexada)
-    // En JS (0-indexado): (base - 1) + offset
-    for (const [region, base] of Object.entries(REGION_BASE)) {
-      const start = base - 1; // índice 0-based del primer col de la región
-      METRICAS.forEach((metrica, offset) => {
-        obj[region + '|' + metrica] = parseFloat(row[start + offset]) || 0;
-      });
-    }
-
-    allData.push(obj);
-  }
-
-  if (allData.length === 0) {
-    setStatus('✗ No se encontraron datos en la hoja Export', false);
-    return;
-  }
-
-  populateSeccionFilter();
-  populateRegionFilter();
-  populatePlanFilter();
-  resetChainedFilters(null);
-  updateViewBtnsAvailability();
-  renderCharts();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -657,29 +841,31 @@ function calcBrands(plans, uns, marcas, regiones, groupBy, seccion) {
   }
 
   // ── Lookup CATEGORIA → share (primera ocurrencia en base filtrada) ──
+  // Incluye el valor "actual" (2026) y el diferencial vs. año anterior.
   const catShareMap = {};
   for (const row of base) {
     if (row.CATEGORIA && !(row.CATEGORIA in catShareMap)) {
       catShareMap[row.CATEGORIA] = {
         shareImp2026: row.YTD_SH_IMP_2026  || 0,
-        shareDifImp:  row.YTD_DIF_SH_IMP   || 0,
         shareVol2026: row.YTD_SH_VOL_2026  || 0,
+        shareDifImp:  row.YTD_DIF_SH_IMP   || 0,
         shareDifVol:  row.YTD_DIF_SH_VOL   || 0,
       };
     }
   }
 
   // ── Lookup CATEGORIA → progresión (primera ocurrencia en base filtrada) ──
-  // Usado por "Ver Progresión" (solo tiene sentido agrupando por Categoría Scentia)
+  // Usado por "Ver Progresión" (solo tiene sentido agrupando por Categoría Scentia).
+  // Incluye el % de progresión actual (RM y CRF) y el GAP CRF vs RM.
   const progMap = {};
   for (const row of base) {
     if (row.CATEGORIA && !(row.CATEGORIA in progMap)) {
       progMap[row.CATEGORIA] = {
         pctProgRmImp:  row.YTD_PCT_PROG_RM_IMP  || 0,
         pctProgCrfImp: row.YTD_PCT_PROG_CRF_IMP || 0,
-        gapCrfRmImp:   row.YTD_GAP_CRF_RM_IMP   || 0,
         pctProgRmVol:  row.YTD_PCT_PROG_RM_VOL  || 0,
         pctProgCrfVol: row.YTD_PCT_PROG_CRF_VOL || 0,
+        gapCrfRmImp:   row.YTD_GAP_CRF_RM_IMP   || 0,
         gapCrfRmVol:   row.YTD_GAP_CRF_RM_VOL   || 0,
       };
     }
@@ -689,6 +875,9 @@ function calcBrands(plans, uns, marcas, regiones, groupBy, seccion) {
   const groupMap = {};
   for (const row of base) {
     const key = row[groupBy];
+    // Filas sin esa dimensión asignada (p.ej. sin Categoría Scentia): se descartan acá, en el
+    // origen, para que no aparezcan como barra fantasma "0.00%" ni en el gráfico ni en el export.
+    if (!key) continue;
     if (!groupMap[key]) groupMap[key] = {
       crfImp: 0, crfUni: 0, mdoImp: 0, mdoUni: 0,
       crfPctImp: 0, crfPctUni: 0, mdoPctImp: 0, mdoPctUni: 0,
@@ -736,26 +925,27 @@ function calcBrands(plans, uns, marcas, regiones, groupBy, seccion) {
     }));
   }
 
-  // ── Índice de precio + share diferencial + progresión por item ──
+  // ── Índice de precio + share + progresión actual por item ──
   return items.map(b => {
-    const catShare = catShareMap[b.categoria] || { shareImp2026: 0, shareDifImp: 0, shareVol2026: 0, shareDifVol: 0 };
+    const catShare = catShareMap[b.categoria] || { shareImp2026: 0, shareVol2026: 0, shareDifImp: 0, shareDifVol: 0 };
     const prog = progMap[b.categoria] || {
-      pctProgRmImp: 0, pctProgCrfImp: 0, gapCrfRmImp: 0,
-      pctProgRmVol: 0, pctProgCrfVol: 0, gapCrfRmVol: 0,
+      pctProgRmImp: 0, pctProgCrfImp: 0,
+      pctProgRmVol: 0, pctProgCrfVol: 0,
+      gapCrfRmImp: 0, gapCrfRmVol: 0,
     };
     return {
       ...b,
       priceIdxCrf:  b.crfUni > 0 ? b.crfImp / b.crfUni : 0,
       priceIdxMdo:  b.mdoUni > 0 ? b.mdoImp / b.mdoUni : 0,
       shareImp2026: catShare.shareImp2026,
-      shareDifImp:  catShare.shareDifImp,
       shareVol2026: catShare.shareVol2026,
+      shareDifImp:  catShare.shareDifImp,
       shareDifVol:  catShare.shareDifVol,
       pctProgRmImp:  prog.pctProgRmImp,
       pctProgCrfImp: prog.pctProgCrfImp,
-      gapCrfRmImp:   prog.gapCrfRmImp,
       pctProgRmVol:  prog.pctProgRmVol,
       pctProgCrfVol: prog.pctProgCrfVol,
+      gapCrfRmImp:   prog.gapCrfRmImp,
       gapCrfRmVol:   prog.gapCrfRmVol,
     };
   });
@@ -770,7 +960,7 @@ function fmt(v) {
   // return v >= 0.00005 ? (v * 100).toFixed(2) + '%' : '';
 }
 
-function renderMirrorChart(divId, brands, colMdo, colCrf, labelMdo, labelCrf, showPct, groupBy, showIP, showShare, shareCol, showProg, progMdoCol, progCrfPctCol, progGapCol) {
+function renderMirrorChart(divId, brands, colMdo, colCrf, labelMdo, labelCrf, showPct, groupBy, showIP, showShare, shareCol, showProg, progMdoCol, progCrfPctCol) {
   const el = document.getElementById(divId);
   groupBy = groupBy || 'MARCA';
 
@@ -784,8 +974,10 @@ function renderMirrorChart(divId, brands, colMdo, colCrf, labelMdo, labelCrf, sh
   if (el._fullLayout) Plotly.purge(el);
   el.innerHTML = '';
 
-  // Altura basada en cantidad de items (sin overhead de padding extra)
-  const h = brands.length * 28 + 24;
+  // Altura basada en cantidad de items (sin overhead de padding extra). Todos los modos
+  // muestran una sola línea de texto por barra (ya no hay Dif/Gap apilado).
+  const rowH = 28;
+  const h = brands.length * rowH + 24;
   el.style.height = h + 'px';
 
   const marca    = brands.map(b => b.marca);
@@ -797,24 +989,9 @@ function renderMirrorChart(divId, brands, colMdo, colCrf, labelMdo, labelCrf, sh
 
   // Formato índice de precio: sin decimales, con "," separador de miles
   const fmtIP    = idx => '$' + Math.round(idx).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  // Formato share: "12.34% | +0.53%"  (valor 2026 | diferencia)
-  const fmtShareFull = (val2026, dif) => {
-    const v26  = (val2026 * 100).toFixed(2) + '%';
-    const sign = dif >= 0 ? '+' : '';
-    const vDif = sign + (dif * 100).toFixed(2) + '%';
-    return v26 + '  |  ' + vDif;
-  };
-
-  // Mapa shareCol → col 2026 correspondiente
-  const share2026Col = shareCol === 'shareDifImp' ? 'shareImp2026' : 'shareVol2026';
-
-  // Formato progresión MDO (lado RM): "85.32%"
+  // Formato simple de porcentaje (2 decimales) — usado por share y progresión, que ahora
+  // muestran sólo el valor actual (sin Dif/Gap apilado debajo).
   const fmtPctSimple = v => (v * 100).toFixed(2) + '%';
-  // Formato progresión CRF: "92.10% | +6.78%" (valor CRF | gap CRF vs RM)
-  const fmtProgFull = (pctCrf, gap) => {
-    const sign = gap >= 0 ? '+' : '';
-    return fmtPctSimple(pctCrf) + '  |  ' + sign + (gap * 100).toFixed(2) + '%';
-  };
 
   // ── Texto para barra MDO (izquierda) ─────────────────────────
   // Ver Share: sin texto en MDO (el share se muestra solo en CRF)
@@ -827,16 +1004,23 @@ function renderMirrorChart(divId, brands, colMdo, colCrf, labelMdo, labelCrf, sh
   };
 
   // ── Texto para barra CRF (derecha) ───────────────────────────
-  // Ver Progresión: muestra "% Prog CRF | GAP CRF vs RM" (DK|DL o DN|DO) de la categoría
+  // Ver Progresión: muestra el % Prog CRF (DK/DN) de la categoría
+  // Ver Share: muestra el share $/uni 2026 de la categoría
   const barTextCrf = (vals, idxArr) => {
-    if (showProg) return brands.map(b => fmtProgFull(b[progCrfPctCol] || 0, b[progGapCol] || 0));
+    if (showProg) return brands.map(b => fmtPctSimple(b[progCrfPctCol] || 0));
     if (!showPct && !showIP && !showShare) return undefined;
     return vals.map((v, i) => {
-      if (showShare) return fmtShareFull(brands[i][share2026Col] || 0, brands[i][shareCol] || 0);
+      if (showShare) return fmtPctSimple(brands[i][shareCol] || 0);
       if (showIP)    return idxArr[i] > 0 ? fmtIP(idxArr[i]) : '';
       return fmt(v);
     });
   };
+
+  // El font global del gráfico (11px, peso normal) queda muy fino para leer los valores
+  // de las barras → se resaltan en negrita (Plotly soporta <b> en "text") y con un tamaño
+  // un poco mayor (textfont a nivel de trace, sin afectar nombres de marca ni ejes).
+  const boldText = arr => arr === undefined ? undefined : arr.map(t => t ? '<b>' + t + '</b>' : t);
+  const VALUE_TEXTFONT = { size: 12 };
 
   const traces = [
     // ── MDO izquierda (valores negativos para espejo) ──
@@ -847,7 +1031,8 @@ function renderMirrorChart(divId, brands, colMdo, colCrf, labelMdo, labelCrf, sh
       marker: { color: COLOR_VST_MDO },
       customdata: mdo,
       hovertemplate: labelMdo + ': %{customdata:.2%}<extra></extra>',
-      text:         barTextMdo(mdo, brands.map(b => b.priceIdxMdo)),
+      text:         boldText(barTextMdo(mdo, brands.map(b => b.priceIdxMdo))),
+      textfont:     VALUE_TEXTFONT,
       textposition: 'outside',
       showlegend: false,
     },
@@ -868,7 +1053,8 @@ function renderMirrorChart(divId, brands, colMdo, colCrf, labelMdo, labelCrf, sh
       marker: { color: colorCrf },
       customdata: crf,
       hovertemplate: labelCrf + ': %{customdata:.2%}<extra></extra>',
-      text:         barTextCrf(crf, brands.map(b => b.priceIdxCrf)),
+      text:         boldText(barTextCrf(crf, brands.map(b => b.priceIdxCrf))),
+      textfont:     VALUE_TEXTFONT,
       textposition: 'outside',
       showlegend: false,
     },
@@ -918,12 +1104,296 @@ function renderCharts() {
 
   // Calcular una sola vez, luego ordenar diferente para cada gráfico
   const allBrands = calcBrands(plans, uns, marcas, regiones, groupBy, seccion);
+  updateExportButtonState(allBrands);
 
   const sortFn = (brands, state) =>
     [...brands].sort((a, b) => state.asc ? a[state.col] - b[state.col] : b[state.col] - a[state.col]);
 
-  renderMirrorChart('chartImp', sortFn(allBrands, sortImp), 'mdoPctImp', 'crfPctImp', 'MDO %$',   'CRF %$',   showPct, groupBy, showIP, showShare, 'shareDifImp', showProg, 'pctProgRmImp', 'pctProgCrfImp', 'gapCrfRmImp');
-  renderMirrorChart('chartUni', sortFn(allBrands, sortUni), 'mdoPctUni', 'crfPctUni', 'MDO %uni', 'CRF %uni', showPct, groupBy, showIP, showShare, 'shareDifVol', showProg, 'pctProgRmVol', 'pctProgCrfVol', 'gapCrfRmVol');
+  renderMirrorChart('chartImp', sortFn(allBrands, sortImp), 'mdoPctImp', 'crfPctImp', 'MDO %$',   'CRF %$',   showPct, groupBy, showIP, showShare, 'shareImp2026', showProg, 'pctProgRmImp', 'pctProgCrfImp');
+  renderMirrorChart('chartUni', sortFn(allBrands, sortUni), 'mdoPctUni', 'crfPctUni', 'MDO %uni', 'CRF %uni', showPct, groupBy, showIP, showShare, 'shareVol2026', showProg, 'pctProgRmVol', 'pctProgCrfVol');
+}
+
+// Habilita "Exportar a Excel" sólo si hay datos para mostrar con los filtros actuales — mismo
+// array (allBrands) que alimenta los dos gráficos. Inhabilitado por defecto (sin archivo
+// cargado) y también cuando, p.ej., se agrupa por Marca sin elegir Planograma.
+function updateExportButtonState(allBrands) {
+  const btn = document.getElementById('btnExportPart');
+  if (btn) btn.disabled = !allBrands.length;
+}
+
+// ══════════════════════════════════════════════════════════════
+// EXPORTAR A EXCEL
+// ══════════════════════════════════════════════════════════════
+// Exporta, sin duplicados, los valores actualmente agrupados por "Agrupar por"
+// (Marca/Planograma/UN/Categoría Scentia) con los mismos filtros activos en pantalla
+// (Planograma/UN/Marca/Sección), y la métrica actualmente visible en los gráficos:
+//   - Ver % (o ninguno seleccionado): Participación $ y Uni (MDO y CRF)
+//   - Ver IP: Índice de Precio MDO y CRF
+//   - Ver Share: Share $ y Uni (2026)
+//   - Ver Progresión: % Prog RM y CRF ($ y Uni)
+// Si la Región filtrada es (o incluye) TOTAL NACIONAL, desglosa cada métrica por las 7
+// regiones (TOTAL NACIONAL + las 6 sub-regiones); si hay una o más sub-regiones puntuales
+// seleccionadas (sin TOTAL NACIONAL), exporta un solo set de columnas con esa combinación
+// (igual que se ve en pantalla en ese momento) — usa calcBrands(), que ya agrupa/dedupe por
+// la dimensión elegida, así que no hace falta una deduplicación aparte.
+function exportParticipacion() {
+  if (!allData.length) return;
+
+  const plans   = getSelected('planSel');
+  const uns     = getSelected('unSel');
+  const marcas  = getSelected('marcaSel');
+  const seccion = document.getElementById('seccionSel').value;
+  const groupBy = document.getElementById('groupBySel').value;
+  const regsSel = getSelected('regionSel');
+  const isTotalNacional = !regsSel.length || regsSel.includes('TOTAL NACIONAL');
+
+  const regionBuckets = isTotalNacional
+    ? Object.keys(REGION_BASE)                         // desglose: las 7 regiones
+    : [regsSel.length ? regsSel.join(' + ') : 'TOTAL NACIONAL']; // un solo set, como en pantalla
+
+  const dataByBucket = {};
+  regionBuckets.forEach(bucket => {
+    const regionesParaCalc = isTotalNacional ? [bucket] : (regsSel.length ? regsSel : ['TOTAL NACIONAL']);
+    dataByBucket[bucket] = calcBrands(plans, uns, marcas, regionesParaCalc, groupBy, seccion);
+  });
+
+  if (!Object.values(dataByBucket).some(arr => arr.length)) {
+    alert('No hay datos para exportar con los filtros actuales.');
+    return;
+  }
+
+  const GROUP_LABELS = { MARCA: 'Marca', PLANOGRAMA: 'Planograma', UN: 'UN', CATEGORIA: 'Categoría Scentia' };
+  const groupLabel = GROUP_LABELS[groupBy] || groupBy;
+
+  let metricCols;
+  let isParticipacion = false;
+  if (viewMode === 'ip') {
+    isParticipacion = true;
+    metricCols = [
+      { key: 'priceIdxMdo', label: 'Índice de Precio MDO', fmt: 'money' },
+      { key: 'priceIdxCrf', label: 'Índice de Precio CRF', fmt: 'money' },
+      // % de participación de la marca/UN/planograma/categoría según lo que esté agrupado,
+      // siempre presente en el export (no solo en la vista "Participación").
+      { key: 'mdoPctImp', label: 'Part. - $ MDO (%)',   fmt: 'pct' },
+      { key: 'crfPctImp', label: 'Part. - $ CRF (%)',   fmt: 'pct' },
+      { key: 'mdoPctUni', label: 'Part. - Uni MDO (%)', fmt: 'pct' },
+      { key: 'crfPctUni', label: 'Part. - Uni CRF (%)', fmt: 'pct' },
+    ];
+  } else if (viewMode === 'share') {
+    isParticipacion = true;
+    metricCols = [
+      { key: 'shareImp2026', label: 'Share $ (%)',       fmt: 'pct' },
+      { key: 'shareDifImp',  label: 'Dif. Share $ (%)',   fmt: 'pct' },
+      { key: 'shareVol2026', label: 'Share Uni (%)',      fmt: 'pct' },
+      { key: 'shareDifVol',  label: 'Dif. Share Uni (%)', fmt: 'pct' },
+      // % de participación de la marca/UN/planograma/categoría según lo que esté agrupado,
+      // siempre presente en el export (no solo en la vista "Participación"). Prefijo "Part. - "
+      // para distinguirlas de las métricas propias de la vista (share/progresión).
+      { key: 'mdoPctImp', label: 'Part. - $ MDO (%)',   fmt: 'pct' },
+      { key: 'crfPctImp', label: 'Part. - $ CRF (%)',   fmt: 'pct' },
+      { key: 'mdoPctUni', label: 'Part. - Uni MDO (%)', fmt: 'pct' },
+      { key: 'crfPctUni', label: 'Part. - Uni CRF (%)', fmt: 'pct' },
+    ];
+  } else if (viewMode === 'progresion') {
+    isParticipacion = true;
+    metricCols = [
+      { key: 'pctProgRmImp',  label: '% Prog RM $',      fmt: 'pct' },
+      { key: 'pctProgCrfImp', label: '% Prog CRF $',     fmt: 'pct' },
+      { key: 'gapCrfRmImp',   label: 'GAP CRF vs RM $',  fmt: 'pct' },
+      { key: 'pctProgRmVol',  label: '% Prog RM Uni',    fmt: 'pct' },
+      { key: 'pctProgCrfVol', label: '% Prog CRF Uni',   fmt: 'pct' },
+      { key: 'gapCrfRmVol',   label: 'GAP CRF vs RM Uni', fmt: 'pct' },
+      // % de participación de la marca/UN/planograma/categoría según lo que esté agrupado,
+      // siempre presente en el export (no solo en la vista "Participación"). Prefijo "Part. - "
+      // para distinguirlas de las métricas propias de la vista (share/progresión).
+      { key: 'mdoPctImp', label: 'Part. - $ MDO (%)',   fmt: 'pct' },
+      { key: 'crfPctImp', label: 'Part. - $ CRF (%)',   fmt: 'pct' },
+      { key: 'mdoPctUni', label: 'Part. - Uni MDO (%)', fmt: 'pct' },
+      { key: 'crfPctUni', label: 'Part. - Uni CRF (%)', fmt: 'pct' },
+    ];
+  } else {
+    isParticipacion = true;
+    metricCols = [
+      { key: 'mdoPctImp', label: '$ MDO (%)',   fmt: 'pct' },
+      { key: 'crfPctImp', label: '$ CRF (%)',   fmt: 'pct' },
+      { key: 'mdoPctUni', label: 'Uni MDO (%)', fmt: 'pct' },
+      { key: 'crfPctUni', label: 'Uni CRF (%)', fmt: 'pct' },
+    ];
+  }
+
+  // Universo de keys sin duplicados: unión de lo que aparece en cualquier bucket de región
+  const allKeys = [];
+  const seen = new Set();
+  regionBuckets.forEach(bucket => {
+    dataByBucket[bucket].forEach(b => {
+      // Descarta la clave vacía (fila sin Marca/Categoría/etc., que solo arrastra ceros porque
+      // catShareMap/progMap nunca la completan) — evita la fila fantasma "0.00%" en el export.
+      if (!b.marca) return;
+      if (!seen.has(b.marca)) { seen.add(b.marca); allKeys.push(b.marca); }
+    });
+  });
+  allKeys.sort();
+
+  const lookup = {}; // bucket -> key -> item
+  regionBuckets.forEach(bucket => {
+    lookup[bucket] = {};
+    dataByBucket[bucket].forEach(b => { lookup[bucket][b.marca] = b; });
+  });
+
+  const multiBucket = regionBuckets.length > 1;
+
+  let ws;
+  if (isParticipacion) {
+    // Vistas Participación, Share y Progresión: encabezado de 2 filas (igual con 1 sola región
+    // que con el desglose en 7) — fila 1 = nombre de la región mergeado sobre sus columnas de
+    // métrica, fila 2 = sub-encabezados de métrica sin repetir "Participación"/"Share"/"Prog"
+    // ni el nombre de la región (ya está en la fila de arriba). Se usa aoa_to_sheet (no
+    // json_to_sheet) porque varias regiones comparten el mismo texto de sub-encabezado y
+    // json_to_sheet necesita keys únicas. Todo el contenido (encabezados y datos) va centrado;
+    // requiere xlsx-js-style, ya que la xlsx plana ignora los estilos de celda al escribir.
+    const headerRow1 = [''];
+    const headerRow2 = [groupLabel];
+    regionBuckets.forEach(bucket => {
+      headerRow1.push(bucket, ...new Array(metricCols.length - 1).fill(''));
+      metricCols.forEach(mc => headerRow2.push(mc.label));
+    });
+    const dataRows = allKeys.map(key => {
+      const r = [key];
+      regionBuckets.forEach(bucket => {
+        const item = lookup[bucket][key];
+        metricCols.forEach(mc => { r.push(item ? (item[mc.key] || 0) : 0); });
+      });
+      return r;
+    });
+    ws = XLSX.utils.aoa_to_sheet([headerRow1, headerRow2, ...dataRows]);
+
+    // Merge del nombre de cada región sobre sus columnas de métrica (fila 1).
+    ws['!merges'] = regionBuckets.map((_, i) => {
+      const c0 = 1 + i * metricCols.length;
+      return { s: { r: 0, c: c0 }, e: { r: 0, c: c0 + metricCols.length - 1 } };
+    });
+
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    // Formato numérico por columna (no todas las vistas son "%": IP usa "money").
+    // La columna C (1-indexed, 0 = etiqueta) cae en metricCols[(C-1) % metricCols.length].
+    const colFmt = {};
+    for (let C = 1; C <= range.e.c; C++) {
+      colFmt[C] = metricCols[(C - 1) % metricCols.length].fmt;
+    }
+    for (let R = 2; R <= range.e.r; R++) {
+      for (let C = 1; C <= range.e.c; C++) {
+        const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+        if (!cell) continue;
+        cell.t = 'n';
+        cell.z = colFmt[C] === 'money' ? '"$"#,##0.00' : '0.00%';
+      }
+    }
+    // Centrado de todas las celdas + estilo de encabezado: fila 1 (región, celdas combinadas)
+    // en #F8CBAD, fila 2 (títulos de métrica) en #B8CCE4, ambas en negrita.
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+        if (!cell) continue;
+        const headerStyle = R === 0
+          ? { fill: { fgColor: { rgb: 'F8CBAD' } }, font: { bold: true } }
+          : R === 1
+            ? { fill: { fgColor: { rgb: 'B8CCE4' } }, font: { bold: true } }
+            : {};
+        cell.s = Object.assign({}, cell.s, { alignment: { horizontal: 'center', vertical: 'center' } }, headerStyle);
+      }
+    }
+
+    // Con más de una región, borde externo alrededor del bloque de columnas de cada región
+    // (de la fila 1 a la última fila de datos) para diferenciarlas visualmente entre sí.
+    if (multiBucket) {
+      const thin = { style: 'thin', color: { rgb: '000000' } };
+      regionBuckets.forEach((_, i) => {
+        const c0 = 1 + i * metricCols.length;
+        const c1 = c0 + metricCols.length - 1;
+        for (let R = range.s.r; R <= range.e.r; R++) {
+          for (let C = c0; C <= c1; C++) {
+            const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+            if (!cell) continue;
+            const border = {};
+            if (R === range.s.r) border.top = thin;
+            if (R === range.e.r) border.bottom = thin;
+            if (C === c0) border.left = thin;
+            if (C === c1) border.right = thin;
+            cell.s = Object.assign({}, cell.s, { border: Object.assign({}, cell.s && cell.s.border, border) });
+          }
+        }
+      });
+    }
+
+    // Autofiltro sobre la fila de títulos (fila 2) y los datos debajo — la fila 1 son celdas
+    // combinadas con el nombre de la región, no tiene sentido poner los desplegables ahí.
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 1, c: range.s.c }, e: { r: range.e.r, c: range.e.c } }) };
+
+    // Ancho de columna = longitud del valor más largo ya formateado (encabezado o dato),
+    // igual que Cells.EntireColumn.AutoFit — mismo criterio que en Piramide_Segmentacion.html.
+    function celdaComoTexto(cell) {
+      if (!cell) return '';
+      if (cell.t === 'n') {
+        if (cell.z === '"$"#,##0.00') return '$' + cell.v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (cell.z === '0.00%') return (cell.v * 100).toFixed(2) + '%';
+        return String(cell.v);
+      }
+      return String(cell.v == null ? '' : cell.v);
+    }
+    const colWidths = [];
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      let maxLen = 0;
+      for (let R = range.s.r; R <= range.e.r; R++) {
+        maxLen = Math.max(maxLen, celdaComoTexto(ws[XLSX.utils.encode_cell({ r: R, c: C })]).length);
+      }
+      colWidths.push({ wch: maxLen + 2 });
+    }
+    ws['!cols'] = colWidths;
+  } else {
+    const out = allKeys.map(key => {
+      const record = {};
+      record[groupLabel] = key;
+      regionBuckets.forEach(bucket => {
+        const item = lookup[bucket][key];
+        metricCols.forEach(mc => {
+          const colName = multiBucket ? (mc.label + ' - ' + bucket) : mc.label;
+          record[colName] = item ? (item[mc.key] || 0) : 0;
+        });
+      });
+      return record;
+    });
+
+    const headers = [groupLabel].concat(
+      multiBucket
+        ? regionBuckets.flatMap(bucket => metricCols.map(mc => mc.label + ' - ' + bucket))
+        : metricCols.map(mc => mc.label)
+    );
+
+    ws = XLSX.utils.json_to_sheet(out, { header: headers });
+
+    // Formato numérico por columna (porcentaje o moneda) — los formatos se repiten en ciclos
+    // de metricCols.length, uno por cada bucket de región.
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    const colFmt = {};
+    headers.forEach((h, i) => {
+      if (i === 0) return;
+      colFmt[i] = metricCols[(i - 1) % metricCols.length].fmt;
+    });
+    for (let R = range.s.r + 1; R <= range.e.r; R++) {
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+        if (!cell) continue;
+        if (colFmt[C] === 'pct')   { cell.t = 'n'; cell.z = '0.00%'; }
+        else if (colFmt[C] === 'money') { cell.t = 'n'; cell.z = '"$"#,##0.00'; }
+      }
+    }
+    ws['!cols'] = [{ wch: 26 }].concat(headers.slice(1).map(() => ({ wch: 20 })));
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Participación');
+  const regionSlug = isTotalNacional ? 'Todas_Regiones' : regsSel.map(r => r.replace(/\s+/g, '_')).join('-');
+  XLSX.writeFile(wb, `Participacion_${groupBy}_${regionSlug}.xlsx`);
 }
 
 // ══════════════════════════════════════════════════════════════
