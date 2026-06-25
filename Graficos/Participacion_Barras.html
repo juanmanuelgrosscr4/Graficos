@@ -960,7 +960,7 @@ function fmt(v) {
   // return v >= 0.00005 ? (v * 100).toFixed(2) + '%' : '';
 }
 
-function renderMirrorChart(divId, brands, colMdo, colCrf, labelMdo, labelCrf, showPct, groupBy, showIP, showShare, shareCol, showProg, progMdoCol, progCrfPctCol) {
+function renderMirrorChart(divId, brands, colMdo, colCrf, labelMdo, labelCrf, showPct, groupBy, showIP, showShare, shareCol, shareDifCol, showProg, progMdoCol, progCrfPctCol, progGapCol) {
   const el = document.getElementById(divId);
   groupBy = groupBy || 'MARCA';
 
@@ -975,7 +975,7 @@ function renderMirrorChart(divId, brands, colMdo, colCrf, labelMdo, labelCrf, sh
   el.innerHTML = '';
 
   // Altura basada en cantidad de items (sin overhead de padding extra). Todos los modos
-  // muestran una sola línea de texto por barra (ya no hay Dif/Gap apilado).
+  // muestran una sola línea de texto por barra (el Dif/Gap va al lado, no apilado debajo).
   const rowH = 28;
   const h = brands.length * rowH + 24;
   el.style.height = h + 'px';
@@ -989,13 +989,27 @@ function renderMirrorChart(divId, brands, colMdo, colCrf, labelMdo, labelCrf, sh
 
   // Formato índice de precio: sin decimales, con "," separador de miles
   const fmtIP    = idx => '$' + Math.round(idx).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  // Formato simple de porcentaje (2 decimales) — usado por share y progresión, que ahora
-  // muestran sólo el valor actual (sin Dif/Gap apilado debajo).
+  // Formato simple de porcentaje (2 decimales) — usado por "Ver Progresión" del lado MDO, que
+  // sigue mostrando un único valor (el GAP CRF vs RM solo tiene sentido del lado CRF).
   const fmtPctSimple = v => (v * 100).toFixed(2) + '%';
+  // Formato de 1 decimal — usado por el par "valor | diferencial" de Share y del par
+  // "valor | GAP" de Progresión (lado CRF).
+  const fmtPct1 = v => (v * 100).toFixed(1) + '%';
+  // Diferencial/GAP en tamaño de fuente menor y color condicional: verde si > 0, rojo si < 0,
+  // color normal de la fuente si = 0. Plotly interpreta este pseudo-HTML dentro de "text"
+  // (mismo mecanismo que ya usa <b> más abajo).
+  const fmtDifSpan = dif => {
+    const sign  = dif > 0 ? '+' : '';
+    const color = dif > 0 ? '#16a34a' : dif < 0 ? '#dc2626' : null;
+    const txt   = sign + fmtPct1(dif);
+    return '<span style="font-size:9px;' + (color ? 'color:' + color + ';' : '') + '">' + txt + '</span>';
+  };
+  // "12.3% | +0.5%" — valor actual seguido del diferencial/GAP coloreado y más chico
+  const fmtValDif = (val, dif) => fmtPct1(val) + '  |  ' + fmtDifSpan(dif);
 
   // ── Texto para barra MDO (izquierda) ─────────────────────────
   // Ver Share: sin texto en MDO (el share se muestra solo en CRF)
-  // Ver Progresión: muestra el % Prog RM (DJ/DM) de la categoría
+  // Ver Progresión: muestra el % Prog RM (DJ/DM) de la categoría, sin GAP (es CRF vs RM)
   const barTextMdo = (vals, idxArr) => {
     if (showProg)  return brands.map(b => fmtPctSimple(b[progMdoCol] || 0));
     if (showShare) return vals.map(() => '');
@@ -1004,13 +1018,15 @@ function renderMirrorChart(divId, brands, colMdo, colCrf, labelMdo, labelCrf, sh
   };
 
   // ── Texto para barra CRF (derecha) ───────────────────────────
-  // Ver Progresión: muestra el % Prog CRF (DK/DN) de la categoría
-  // Ver Share: muestra el share $/uni 2026 de la categoría
+  // Ver Progresión: % Prog CRF (DK/DN) | GAP CRF vs RM (DL/DO), coloreado
+  // Ver Share: share $/uni 2026 | diferencial vs. año anterior, coloreado
   const barTextCrf = (vals, idxArr) => {
-    if (showProg) return brands.map(b => fmtPctSimple(b[progCrfPctCol] || 0));
+    if (showProg) return brands.map(b => fmtValDif(b[progCrfPctCol] || 0, b[progGapCol] || 0));
     if (!showPct && !showIP && !showShare) return undefined;
     return vals.map((v, i) => {
-      if (showShare) return fmtPctSimple(brands[i][shareCol] || 0);
+      // &nbsp; = mínimo padding entre la punta de la barra y el texto, solo en Share
+      // (en Progresión el espaciado por defecto de Plotly ya se ve bien).
+      if (showShare) return '&nbsp;' + fmtValDif(brands[i][shareCol] || 0, brands[i][shareDifCol] || 0);
       if (showIP)    return idxArr[i] > 0 ? fmtIP(idxArr[i]) : '';
       return fmt(v);
     });
@@ -1109,8 +1125,8 @@ function renderCharts() {
   const sortFn = (brands, state) =>
     [...brands].sort((a, b) => state.asc ? a[state.col] - b[state.col] : b[state.col] - a[state.col]);
 
-  renderMirrorChart('chartImp', sortFn(allBrands, sortImp), 'mdoPctImp', 'crfPctImp', 'MDO %$',   'CRF %$',   showPct, groupBy, showIP, showShare, 'shareImp2026', showProg, 'pctProgRmImp', 'pctProgCrfImp');
-  renderMirrorChart('chartUni', sortFn(allBrands, sortUni), 'mdoPctUni', 'crfPctUni', 'MDO %uni', 'CRF %uni', showPct, groupBy, showIP, showShare, 'shareVol2026', showProg, 'pctProgRmVol', 'pctProgCrfVol');
+  renderMirrorChart('chartImp', sortFn(allBrands, sortImp), 'mdoPctImp', 'crfPctImp', 'MDO %$',   'CRF %$',   showPct, groupBy, showIP, showShare, 'shareImp2026', 'shareDifImp', showProg, 'pctProgRmImp', 'pctProgCrfImp', 'gapCrfRmImp');
+  renderMirrorChart('chartUni', sortFn(allBrands, sortUni), 'mdoPctUni', 'crfPctUni', 'MDO %uni', 'CRF %uni', showPct, groupBy, showIP, showShare, 'shareVol2026', 'shareDifVol', showProg, 'pctProgRmVol', 'pctProgCrfVol', 'gapCrfRmVol');
 }
 
 // Habilita "Exportar a Excel" sólo si hay datos para mostrar con los filtros actuales — mismo
@@ -1166,6 +1182,10 @@ function exportParticipacion() {
   const groupLabel = GROUP_LABELS[groupBy] || groupBy;
 
   let metricCols;
+  // Columnas que NO varían por región (share/progresión vienen de catShareMap/progMap, que se
+  // calculan por categoría sin depender de la región elegida) → van una sola vez, antes del
+  // bloque de regiones, en vez de repetirse en cada bucket como las columnas de Participación.
+  let staticCols = [];
   let isParticipacion = false;
   if (viewMode === 'ip') {
     isParticipacion = true;
@@ -1181,14 +1201,18 @@ function exportParticipacion() {
     ];
   } else if (viewMode === 'share') {
     isParticipacion = true;
-    metricCols = [
+    // Share 2026 y su diferencial vs. año anterior: valor de categoría, no de región → bloque
+    // estático, una sola vez, desde la columna B.
+    staticCols = [
       { key: 'shareImp2026', label: 'Share $ (%)',       fmt: 'pct' },
       { key: 'shareDifImp',  label: 'Dif. Share $ (%)',   fmt: 'pct' },
       { key: 'shareVol2026', label: 'Share Uni (%)',      fmt: 'pct' },
       { key: 'shareDifVol',  label: 'Dif. Share Uni (%)', fmt: 'pct' },
-      // % de participación de la marca/UN/planograma/categoría según lo que esté agrupado,
-      // siempre presente en el export (no solo en la vista "Participación"). Prefijo "Part. - "
-      // para distinguirlas de las métricas propias de la vista (share/progresión).
+    ];
+    metricCols = [
+      // % de participación de la marca/UN/planograma/categoría según lo que esté agrupado —
+      // esto sí varía por región, se mantiene desglosado por bucket como antes. Prefijo
+      // "Part. - " para distinguirlas de las métricas propias de la vista (share).
       { key: 'mdoPctImp', label: 'Part. - $ MDO (%)',   fmt: 'pct' },
       { key: 'crfPctImp', label: 'Part. - $ CRF (%)',   fmt: 'pct' },
       { key: 'mdoPctUni', label: 'Part. - Uni MDO (%)', fmt: 'pct' },
@@ -1196,16 +1220,19 @@ function exportParticipacion() {
     ];
   } else if (viewMode === 'progresion') {
     isParticipacion = true;
-    metricCols = [
+    // % Prog RM/CRF y GAP CRF vs RM: valor de categoría, no de región → bloque estático.
+    staticCols = [
       { key: 'pctProgRmImp',  label: '% Prog RM $',      fmt: 'pct' },
       { key: 'pctProgCrfImp', label: '% Prog CRF $',     fmt: 'pct' },
       { key: 'gapCrfRmImp',   label: 'GAP CRF vs RM $',  fmt: 'pct' },
       { key: 'pctProgRmVol',  label: '% Prog RM Uni',    fmt: 'pct' },
       { key: 'pctProgCrfVol', label: '% Prog CRF Uni',   fmt: 'pct' },
       { key: 'gapCrfRmVol',   label: 'GAP CRF vs RM Uni', fmt: 'pct' },
-      // % de participación de la marca/UN/planograma/categoría según lo que esté agrupado,
-      // siempre presente en el export (no solo en la vista "Participación"). Prefijo "Part. - "
-      // para distinguirlas de las métricas propias de la vista (share/progresión).
+    ];
+    metricCols = [
+      // % de participación de la marca/UN/planograma/categoría según lo que esté agrupado —
+      // esto sí varía por región, se mantiene desglosado por bucket como antes. Prefijo
+      // "Part. - " para distinguirlas de las métricas propias de la vista (progresión).
       { key: 'mdoPctImp', label: 'Part. - $ MDO (%)',   fmt: 'pct' },
       { key: 'crfPctImp', label: 'Part. - $ CRF (%)',   fmt: 'pct' },
       { key: 'mdoPctUni', label: 'Part. - Uni MDO (%)', fmt: 'pct' },
@@ -1247,18 +1274,29 @@ function exportParticipacion() {
     // Vistas Participación, Share y Progresión: encabezado de 2 filas (igual con 1 sola región
     // que con el desglose en 7) — fila 1 = nombre de la región mergeado sobre sus columnas de
     // métrica, fila 2 = sub-encabezados de métrica sin repetir "Participación"/"Share"/"Prog"
-    // ni el nombre de la región (ya está en la fila de arriba). Se usa aoa_to_sheet (no
-    // json_to_sheet) porque varias regiones comparten el mismo texto de sub-encabezado y
-    // json_to_sheet necesita keys únicas. Todo el contenido (encabezados y datos) va centrado;
-    // requiere xlsx-js-style, ya que la xlsx plana ignora los estilos de celda al escribir.
+    // ni el nombre de la región (ya está en la fila de arriba). En Share/Progresión, además, las
+    // columnas propias de la vista (incl. dif/gap) no dependen de la región → se exportan una
+    // sola vez en "staticCols", antes del bloque de regiones, en vez de repetirse en cada bucket.
+    // Se usa aoa_to_sheet (no json_to_sheet) porque varias regiones comparten el mismo texto de
+    // sub-encabezado y json_to_sheet necesita keys únicas. Todo el contenido (encabezados y
+    // datos) va centrado; requiere xlsx-js-style, ya que la xlsx plana ignora los estilos de
+    // celda al escribir.
     const headerRow1 = [''];
     const headerRow2 = [groupLabel];
+    // Bloque estático (Share/Progresión, incluye dif/gap): va una sola vez, inmediatamente
+    // después de la columna de agrupación (columna B en adelante) — sin nombre de región
+    // mergeado arriba, ya que no depende de la región seleccionada.
+    staticCols.forEach(sc => { headerRow1.push(''); headerRow2.push(sc.label); });
     regionBuckets.forEach(bucket => {
       headerRow1.push(bucket, ...new Array(metricCols.length - 1).fill(''));
       metricCols.forEach(mc => headerRow2.push(mc.label));
     });
     const dataRows = allKeys.map(key => {
       const r = [key];
+      // El valor estático es el mismo en cualquier bucket (no varía por región) — se toma del
+      // primero que tenga el item.
+      const anyItem = regionBuckets.map(b => lookup[b][key]).find(Boolean);
+      staticCols.forEach(sc => { r.push(anyItem ? (anyItem[sc.key] || 0) : 0); });
       regionBuckets.forEach(bucket => {
         const item = lookup[bucket][key];
         metricCols.forEach(mc => { r.push(item ? (item[mc.key] || 0) : 0); });
@@ -1267,18 +1305,22 @@ function exportParticipacion() {
     });
     ws = XLSX.utils.aoa_to_sheet([headerRow1, headerRow2, ...dataRows]);
 
-    // Merge del nombre de cada región sobre sus columnas de métrica (fila 1).
+    // Merge del nombre de cada región sobre sus columnas de métrica (fila 1) — desplazado por
+    // la cantidad de columnas estáticas insertadas antes del bloque de regiones.
     ws['!merges'] = regionBuckets.map((_, i) => {
-      const c0 = 1 + i * metricCols.length;
+      const c0 = 1 + staticCols.length + i * metricCols.length;
       return { s: { r: 0, c: c0 }, e: { r: 0, c: c0 + metricCols.length - 1 } };
     });
 
     const range = XLSX.utils.decode_range(ws['!ref']);
-    // Formato numérico por columna (no todas las vistas son "%": IP usa "money").
-    // La columna C (1-indexed, 0 = etiqueta) cae en metricCols[(C-1) % metricCols.length].
+    // Formato numérico por columna (no todas las vistas son "%": IP usa "money"). Las primeras
+    // staticCols.length columnas (después de la etiqueta) usan su propio fmt; el resto cae en
+    // metricCols[(C-1-staticCols.length) % metricCols.length].
     const colFmt = {};
     for (let C = 1; C <= range.e.c; C++) {
-      colFmt[C] = metricCols[(C - 1) % metricCols.length].fmt;
+      colFmt[C] = C <= staticCols.length
+        ? staticCols[C - 1].fmt
+        : metricCols[(C - 1 - staticCols.length) % metricCols.length].fmt;
     }
     for (let R = 2; R <= range.e.r; R++) {
       for (let C = 1; C <= range.e.c; C++) {
@@ -1308,7 +1350,7 @@ function exportParticipacion() {
     if (multiBucket) {
       const thin = { style: 'thin', color: { rgb: '000000' } };
       regionBuckets.forEach((_, i) => {
-        const c0 = 1 + i * metricCols.length;
+        const c0 = 1 + staticCols.length + i * metricCols.length;
         const c1 = c0 + metricCols.length - 1;
         for (let R = range.s.r; R <= range.e.r; R++) {
           for (let C = c0; C <= c1; C++) {
