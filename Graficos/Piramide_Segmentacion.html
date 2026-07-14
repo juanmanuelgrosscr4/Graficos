@@ -59,8 +59,11 @@ header span{font-size:12px;opacity:.75;display:block;margin-top:2px}
 .seg-body{border:1px solid #e2e8f0;border-top:none;border-radius:0 0 6px 6px;overflow-y:auto;max-height:400px}
 .brand-item{padding:8px 10px;border-bottom:1px solid #f1f5f9}
 .brand-item.rec-bg{background:#fefce8}
+.brand-item.rec-bg-2{background:#fff4e6}
+.brand-item.rec-bg-3{background:#f5f3ff}
 .brand-item.one-reg{background:#fff7ed}
 .brand-item.rec-bg.one-reg{background:#fef3c7}
+.missing-eans{font-size:10px;color:#5b21b6;margin-top:3px}
 .brand-top{display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:3px}
 .brand-name{font-weight:600;font-size:12px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .brand-pct{font-size:12px;font-weight:700;color:#1d4ed8;white-space:nowrap}
@@ -69,6 +72,8 @@ header span{font-size:12px;opacity:.75;display:block;margin-top:2px}
 .badge-crf{background:#dcfce7;color:#15803d}
 .badge-ncrf{background:#fee2e2;color:#b91c1c}
 .badge-rec{background:#fef9c3;color:#a16207}
+.badge-rec2{background:#ffedd5;color:#c2410c}
+.badge-rec3{background:#ede9fe;color:#5b21b6}
 .badge-1reg{background:#fed7aa;color:#c2410c}
 .badge-multi{background:#e0e7ff;color:#3730a3}
 .brand-detail{font-size:11px;color:#64748b;margin-top:1px}
@@ -76,6 +81,9 @@ header span{font-size:12px;opacity:.75;display:block;margin-top:2px}
 .filter-bar{display:flex;gap:4px;padding:6px 10px;background:#f8fafc;border-bottom:1px solid #e2e8f0;flex-wrap:wrap}
 .filt-btn{padding:2px 8px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;font-size:11px;cursor:pointer;color:#475569}
 .filt-btn.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
+.filt-btn-rec1.active{background:#a16207;border-color:#a16207}
+.filt-btn-rec2.active{background:#c2410c;border-color:#c2410c}
+.filt-btn-rec3.active{background:#5b21b6;border-color:#5b21b6}
 .no-data{padding:20px;text-align:center;color:#94a3b8;font-size:12px}
 
 .rec-toolbar{display:flex;align-items:center;justify-content:space-between;padding:2px 4px;gap:12px}
@@ -172,7 +180,7 @@ header span{font-size:12px;opacity:.75;display:block;margin-top:2px}
     <div class="pyr-rows" id="pyr-rows"></div>
   </div>
   <div class="rec-toolbar">
-    <span class="rec-toolbar-title">★ Recomendaciones por Segmento (marcas sin Carrefour con participación destacada)</span>
+    <span class="rec-toolbar-title">★ Recomendaciones por Segmento · <span style="color:#a16207">★ Sin CRF</span> · <span style="color:#c2410c">⚠ Status FC</span> · <span style="color:#5b21b6">◐ EANs parciales</span></span>
     <button class="export-btn" id="btnExportRec" onclick="exportRecomendaciones()" disabled>&#11015; Exportar a Excel</button>
   </div>
   <div class="brand-panel" id="brand-panel"></div>
@@ -189,10 +197,12 @@ const COL = {
   PLANOGRAMA:  2,
   UN:          3,
   DESCRIPCION: 4,
-  MARCA:       6,
-  CATEGORIA:   7,  // "Categoría Scentia"
-  RANGO:       21, // segmentación calculada a nivel planograma (sin UN)
-  RANGO_UN:    22, // segmentación calculada a nivel UN
+  STATUS_FC:   5,  // columna F (nueva): 0, 1, 2, 3 ó "-" si no hay dato
+  FABRICANTE:  6,  // columna G (era F)
+  MARCA:       7,  // columna H (era G)
+  CATEGORIA:   8,  // columna I (era H) — "Categoría Scentia"
+  RANGO:       22, // columna W (era V) — segmentación por planograma
+  RANGO_UN:    23, // columna X (era W) — segmentación por UN
 };
 
 // ============================================================
@@ -205,7 +215,7 @@ const COL = {
 // ============================================================
 const REGION_BLOCK_HEADERS = ['CRF $','%PG $','%UN $','CRF uni','%PG uni','%UN uni','MDO $','%PG $','%UN $','MDO uni','%PG uni','%UN uni'];
 const EXPECTED_HEADERS = [
-  'EAN','SECCIÓN','PLANOGRAMA','UN','DESCRIPCIÓN','FABRICANTE','MARCA','CATEGORÍA',
+  'EAN','SECCIÓN','PLANOGRAMA','UN','DESCRIPCIÓN','STATUS_FC','FABRICANTE','MARCA','CATEGORÍA',
   'CRF UNIDADES','CRF IMPORTE NETO','MDO UNIDADES','MDO IMPORTE NETO','MDO UNIDADES','MDO NETO',
   'PLANO-MARCA','UN-MARCA','PRECIO','PRECIO PLANO','PRECIO UN','PRECIO PROMEDIO PLANO MARCA','PRECIO PROMEDIO UN MARCA',
   'RANGO PLANOGRAMA','RANGO UN',
@@ -227,17 +237,18 @@ const EXPECTED_HEADERS = [
 // Compara la fila de encabezados real (allRows[2]) contra EXPECTED_HEADERS, columna por
 // columna (recortando espacios). Devuelve un array de strings describiendo cada diferencia;
 // vacío si coincide. Usar contra los datos crudos de sheet_to_json({header:1}).
+// Solo valida las columnas del bloque fijo (hasta 'YTD GAP CRF vs RM VOL').
+// Las columnas de competidores que siguen (distintas entre Retail y Maxi) se ignoran.
+// Normaliza tildes → CATEGORÍA ≡ CATEGORIA, SECCIÓN ≡ SECCION, etc.
 function validarColumnas(allRows){
   const headerRow = allRows[2] || [];
   const errores = [];
-  const n = Math.max(EXPECTED_HEADERS.length, headerRow.length);
-  for(let i=0;i<n;i++){
-    const esperado = EXPECTED_HEADERS[i];
-    const real = String(headerRow[i]==null?'':headerRow[i]).trim();
-    if(esperado===undefined){
-      errores.push(`Columna ${i+1}: columna inesperada "${real}"`);
-    } else if(real!==esperado){
-      errores.push(`Columna ${i+1}: se esperaba "${esperado}" y se encontró "${real||'(vacío)'}"`);
+  const norm = s => String(s==null?'':s).trim().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  for(let i=0;i<EXPECTED_HEADERS.length;i++){
+    const real = norm(headerRow[i]);
+    const esp  = norm(EXPECTED_HEADERS[i]);
+    if(real!==esp){
+      errores.push(`Columna ${i+1}: se esperaba "${EXPECTED_HEADERS[i]}" y se encontró "${String(headerRow[i]==null?'':headerRow[i]).trim()||'(vacío)'}"`);
     }
   }
   return errores;
@@ -344,12 +355,14 @@ function onPlanoChange(){
   const selPlanos=getSelectedValues(selPlano);
   const isTotal=selPlanos.includes('__TOTAL__');
   selUN.innerHTML='';
-  if(!isTotal && selPlanos.length){
+  // Total surtido: mostrar todas las UNs de la sección. Planograma específico: solo sus UNs.
+  const unRows = isTotal ? getSeccionRows() : selPlanos.reduce((a,pl)=>a.concat(RAWROWS[pl]||[]),[]);
+  if(isTotal || selPlanos.length){
     const unSet=new Set();
-    selPlanos.forEach(pl=>{ (RAWROWS[pl]||[]).forEach(r=>unSet.add(r[COL.UN])); });
+    unRows.forEach(r=>unSet.add(r[COL.UN]));
     [...unSet].sort().forEach(u=>{const o=document.createElement('option');o.value=u;o.textContent=u;selUN.appendChild(o);});
   }
-  selUN.disabled = isTotal || !selPlanos.length;
+  selUN.disabled = !isTotal && !selPlanos.length;
   populateMarcaOptions();
   recalcCurrentNode();
   render();
@@ -526,7 +539,9 @@ function buildBrandPanel(){
       <button class="filt-btn ${af==='1reg'?'active':''}"   onclick="setFilter('${rango}','1reg')">1 región</button>
       <button class="filt-btn ${af==='multi'?'active':''}"  onclick="setFilter('${rango}','multi')">Multireg</button>
       <button class="filt-btn ${af==='nocrf'?'active':''}"  onclick="setFilter('${rango}','nocrf')">✕ No CRF</button>
-      <button class="filt-btn ${af==='rec'?'active':''}"    onclick="setFilter('${rango}','rec')">★ Rec</button>
+      <button class="filt-btn filt-btn-rec1 ${af==='rec1'?'active':''}" onclick="setFilter('${rango}','rec1')">Rec. Marca no CRF</button>
+      <button class="filt-btn filt-btn-rec2 ${af==='rec2'?'active':''}" onclick="setFilter('${rango}','rec2')">Rec. Marca si CRF</button>
+      <button class="filt-btn filt-btn-rec3 ${af==='rec3'?'active':''}" onclick="setFilter('${rango}','rec3')">Rec. EAN no CRF</button>
     </div>
     <div class="seg-body">`;
     if(!d||!d.marcas||!d.marcas.length){html+='<div class="no-data">Sin marcas con este filtro</div>';}
@@ -535,7 +550,9 @@ function buildBrandPanel(){
       if(af==='1reg')       ms=ms.filter(x=>(x.mr===1||x.cr===1));
       else if(af==='multi') ms=ms.filter(x=>x.mr>=2||x.cr>=2);
       else if(af==='nocrf') ms=ms.filter(x=>x.c===0);
-      else if(af==='rec')   ms=ms.filter(x=>x.r===1);
+      else if(af==='rec1')  ms=ms.filter(x=>x.r1);
+      else if(af==='rec2')  ms=ms.filter(x=>x.r2);
+      else if(af==='rec3')  ms=ms.filter(x=>x.r3);
       if(!ms.length) html+='<div class="no-data">Sin marcas con este filtro</div>';
       else ms.forEach(mk=>{
         const pct=metric==='uni'?mk.pu:mk.pi;
@@ -543,11 +560,23 @@ function buildBrandPanel(){
         const badges=[];
         if(mk.c) badges.push('<span class="badge badge-crf">✓ CRF</span>');
         else     badges.push('<span class="badge badge-ncrf">✕ CRF</span>');
-        if(mk.r) badges.push('<span class="badge badge-rec">★ Recomendar</span>');
+        if(mk.r1) badges.push('<span class="badge badge-rec">★ Sin CRF</span>');
+        if(mk.r2){
+          const fcVals=mk.statusFcVals.filter(v=>v==='2'||v==='3').join('/');
+          badges.push('<span class="badge badge-rec2">⚠ Status FC '+fcVals+'</span>');
+        }
+        if(mk.r3) badges.push('<span class="badge badge-rec3">◐ '+mk.missingEans.length+' EAN'+(mk.missingEans.length>1?'s':'')+' faltante'+(mk.missingEans.length>1?'s':'')+'</span>');
         if(isOneReg) badges.push('<span class="badge badge-1reg">1 región</span>');
         else if(mk.mr>=2||mk.cr>=2) badges.push('<span class="badge badge-multi">Multireg</span>');
         const regInfo=`MDO: ${mk.mr} reg · CRF: ${mk.cr} reg`;
-        html+=`<div class="brand-item ${mk.r?'rec-bg':''} ${isOneReg?'one-reg':''}">
+        const recBgClass=mk.r1?'rec-bg':mk.r2?'rec-bg-2':mk.r3?'rec-bg-3':'';
+        let missingEanHtml='';
+        if(mk.r3&&mk.missingEans.length){
+          const names=mk.missingEans.slice(0,3).map(r=>r[COL.DESCRIPCION]||String(r[COL.EAN]||'?')).join(' · ');
+          const more=mk.missingEans.length>3?' · <em>+'+(mk.missingEans.length-3)+' más</em>':'';
+          missingEanHtml=`<div class="missing-eans">◐ Top-80% no surtidos: ${names}${more}</div>`;
+        }
+        html+=`<div class="brand-item ${recBgClass} ${isOneReg?'one-reg':''}">
           <div class="brand-top">
             <span class="brand-name" title="${mk.m}">${mk.m}</span>
             <span class="brand-pct">${fmtP(pct)} seg.</span>
@@ -555,6 +584,7 @@ function buildBrandPanel(){
           <div class="brand-badges">${badges.join('')}</div>
           <div class="brand-detail">MDO: ${fmt$(mk.ppm)} | CRF: ${fmt$(mk.ppc)}</div>
           <div class="brand-eans">EANs: ${fmtN(mk.et)} · CRF: ${fmtN(mk.ec)} · MDO: ${fmtN(mk.em)} · ${regInfo}</div>
+          ${missingEanHtml}
         </div>`;
       });
     }
@@ -591,7 +621,7 @@ function hasAnyRecommendation(){
     const d=getSeg(rango,region);
     if(!d||!d.marcas) return false;
     const ms=selMarcas.length?d.marcas.filter(x=>selMarcas.includes(x.m)):d.marcas;
-    return ms.some(x=>x.r===1);
+    return ms.some(x=>x.r1||x.r2||x.r3);
   });
 }
 function updateExportButtonState(){
@@ -627,17 +657,28 @@ function exportRecomendaciones(){
       regionTotals[sr]=dr?(dr.ci+dr.di):0;
     });
     let ms=selMarcas.length?d.marcas.filter(x=>selMarcas.includes(x.m)):d.marcas;
-    ms=ms.filter(x=>x.r===1); // sólo recomendadas, sin importar el filtro de columna (Todas/1 región/etc.)
+    ms=ms.filter(x=>x.r1||x.r2||x.r3);
     ms.forEach(mk=>{
       const pct=metric==='uni'?mk.pu:mk.pi;
-      // Participación de la MARCA dentro de todo el planograma: un valor para la región
-      // actualmente seleccionada y un valor por cada una de las 7 regiones (REGIONS_ALL).
-      // Es constante por marca (no por EAN), así que se calcula una sola vez acá afuera del
-      // loop de EANs en vez de recalcularlo por cada fila.
-      const planogramaPct = getPlanogramaShare(mk.m, region);
-      const planogramaByRegion = {};
+      const planogramaPct=getPlanogramaShare(mk.m, region);
+      const planogramaByRegion={};
       REGIONS_ALL.forEach(sr=>{ planogramaByRegion[sr]=getPlanogramaShare(mk.m, sr); });
-      (mk.brows||[]).forEach(row=>{
+
+      // Armar las filas a exportar según el tipo de recomendación
+      const rowsWithTipo=[];
+      if(mk.r1){
+        (mk.brows||[]).forEach(row=>rowsWithTipo.push({row, tipo:'Tipo 1 - Sin CRF'}));
+      }
+      if(mk.r2){
+        (mk.brows||[])
+          .filter(r=>{ const s=String(r[COL.STATUS_FC]||'').trim(); return s==='2'||s==='3'; })
+          .forEach(row=>rowsWithTipo.push({row, tipo:'Tipo 2 - Status FC '+String(row[COL.STATUS_FC]||'').trim()}));
+      }
+      if(mk.r3){
+        (mk.missingEans||[]).forEach(row=>rowsWithTipo.push({row, tipo:'Tipo 3 - EAN top-80% sin surtido'}));
+      }
+
+      rowsWithTipo.forEach(({row, tipo})=>{
         const eanRaw=row[COL.EAN];
         const record={
           EAN: (eanRaw===''||eanRaw==null)?'':num(eanRaw),
@@ -647,6 +688,8 @@ function exportRecomendaciones(){
           'UN': row[COL.UN]||'',
           'Categoría Scentia': row[COL.CATEGORIA]||'',
           Marca: mk.m,
+          'Status FC': String(row[COL.STATUS_FC]||'').trim(),
+          'Tipo Recomendación': tipo,
           'Precio Promedio MDO': mk.ppm,
           Segmento: rango,
           'Participación en el Segmento': pct/100,
@@ -654,7 +697,7 @@ function exportRecomendaciones(){
         };
         REGIONS_ALL.forEach(sr=>{
           const b=REGION_BASE[sr];
-          const eanImp=num(row[b])+num(row[b+6]); // CRF$ + MDO$ de este EAN en esa región
+          const eanImp=num(row[b])+num(row[b+6]);
           const tot=regionTotals[sr];
           record[sr]=tot>0?eanImp/tot:0;
         });
@@ -665,19 +708,16 @@ function exportRecomendaciones(){
   });
   if(!out.length){ alert('No hay marcas recomendadas para exportar con los filtros actuales.'); return; }
 
-  const headers=['EAN','Descripción','Sección','Planograma','UN','Categoría Scentia','Marca','Precio Promedio MDO','Segmento',
+  // Col 0:EAN 1:Desc 2:Secc 3:Plano 4:UN 5:Cat 6:Marca 7:StatusFC 8:TipoRec 9:Precio 10:Segmento 11:Part.Seg 12+:REGIONES 19:Part.Plano 20+:Plano-REGIONES
+  const headers=['EAN','Descripción','Sección','Planograma','UN','Categoría Scentia','Marca','Status FC','Tipo Recomendación','Precio Promedio MDO','Segmento',
                  'Participación en el Segmento']
                 .concat(REGIONS_ALL)
                 .concat(['Part. en el Planograma'])
                 .concat(REGIONS_ALL.map(sr=>'Planograma - '+sr));
   const ws=XLSX.utils.json_to_sheet(out,{header:headers});
 
-  // Índices de columna (0-based) según el orden de "headers" arriba.
-  // REGIONS_ALL = ['TOTAL NACIONAL', ...SUBREGIONS] → 7 columnas para el cruce EAN×región
-  // (participación en el segmento), luego "Part. en el Planograma" y otras 7 para el cruce
-  // marca×región (participación en el planograma).
-  const C_EAN=0, C_DESC=1, C_PRECIO=7, C_PART=9;
-  const REGION_START=10, C_PART_PLANO=REGION_START+REGIONS_ALL.length;
+  const C_EAN=0, C_DESC=1, C_PRECIO=9, C_PART=11;
+  const REGION_START=12, C_PART_PLANO=REGION_START+REGIONS_ALL.length;
   const PLANO_REGION_START=C_PART_PLANO+1;
   const pctCols=[C_PART, C_PART_PLANO]
     .concat(REGIONS_ALL.map((_,i)=>REGION_START+i))
@@ -751,7 +791,7 @@ window.addEventListener('resize',()=>{ if(META) render(); });
 // REGION_BASE_START = columna de 'TOTAL NACIONAL'; el resto se calcula sumando el ancho
 // del bloque (REGION_STEP) — así, si se inserta una columna antes de estos bloques, sólo
 // hay que tocar REGION_BASE_START (o COL, arriba) y no cada número por separado.
-const REGION_BASE_START = 23;
+const REGION_BASE_START = 24;
 const REGION_STEP = 12;
 const SUBREGIONS  = ['NOA','LITORAL','CUYO','CORDOBA','BS AS','PATAGONIA'];
 const REGIONS_ALL = ['TOTAL NACIONAL'].concat(SUBREGIONS);
@@ -760,6 +800,25 @@ REGIONS_ALL.forEach((region,i)=>{ REGION_BASE[region] = REGION_BASE_START + i*RE
 
 function num(v){ const n=parseFloat(v); return isNaN(n)?0:n; }
 function round2(v){ return Math.round(v*100)/100; }
+
+// Tipo 3: EANs de la marca que representan el top-80% de venta MDO$ en el segmento
+// pero que NO están surtidos en CRF. Solo aplica a marcas que CRF ya trabaja (c===1).
+// Devuelve {missingEans: [...filas]}.
+function computeType3(brandRows, regionBase){
+  const totalMdo=brandRows.reduce((s,r)=>s+num(r[regionBase+6]),0);
+  if(totalMdo<=0) return {missingEans:[]};
+  const sorted=[...brandRows].sort((a,b_)=>num(b_[regionBase+6])-num(a[regionBase+6]));
+  let cumMdo=0;
+  const top80=[];
+  for(const row of sorted){
+    cumMdo+=num(row[regionBase+6]);
+    top80.push(row);
+    if(cumMdo>=totalMdo*0.8) break;
+  }
+  // EANs del top-80% sin ventas en CRF (unidades CRF = r[regionBase+3] = 0)
+  const missingEans=top80.filter(r=>num(r[regionBase+3])<=0);
+  return {missingEans};
+}
 
 // Construye el nodo agregado {et,ec,em,ci,cu,di,du,pci,pmi,pcu,pmu,pc,pm,nm,ncrf,nnc,nrec,marcas}
 // para un conjunto de filas (ya filtradas por planograma+UN+rango) y una región dada.
@@ -793,7 +852,15 @@ function buildNode(rowsArr, region){
     const piRaw = totImp>0 ? (bci+bdi)/totImp*100 : 0;
     const puRaw = totUni>0 ? (bcu+bdu)/totUni*100 : 0;
     const c  = bcu>0 ? 1 : 0;
-    const rf = (c===0 && piRaw>=3) ? 1 : 0;
+    // Tipo 1: sin presencia CRF y con part. ≥ 3% en el segmento
+    const r1 = (c===0 && piRaw>=3) ? 1 : 0;
+    // Tipo 2: Status_FC 2 ó 3, con CRF$ > 0 y part. ≥ 3% en el segmento
+    const statusFcVals=[...new Set(brows.map(r=>String(r[COL.STATUS_FC]||'').trim()))];
+    const hasStatusFc23=statusFcVals.some(v=>v==='2'||v==='3');
+    const r2=(c===1 && bci>0 && piRaw>=3 && hasStatusFc23) ? 1 : 0;
+    // Tipo 3: marca ya en CRF pero con EANs top-80% MDO$ no surtidos
+    const t3=computeType3(brows, b);
+    const r3=(c===1 && t3.missingEans.length>0) ? 1 : 0;
     const pp  = (bcu+bdu)>0 ? round2((bci+bdi)/(bcu+bdu)) : 0;
     const ppc = bcu>0 ? round2(bci/bcu) : 0;
     const ppm = bdu>0 ? round2(bdi/bdu) : 0;
@@ -824,11 +891,10 @@ function buildNode(rowsArr, region){
     const cr = SUBREGIONS.filter(sr=>allBrandRows.some(r=>num(r[REGION_BASE[sr]+3])>0)).length;
     const mr = mrNames.length;
 
-    marcas.push({m:mname, pi:round2(piRaw), pu:round2(puRaw), c:c, r:rf, pp:pp, ppc:ppc, ppm:ppm,
+    marcas.push({m:mname, pi:round2(piRaw), pu:round2(puRaw), c:c,
+                 r1:r1, r2:r2, r3:r3, statusFcVals:statusFcVals, missingEans:t3.missingEans,
+                 pp:pp, ppc:ppc, ppm:ppm,
                  et:bet, e2:e2, ec:bec, em:bem, mr:mr, cr:cr, mrNames:mrNames, brows:brows,
-                 // $ y unidades crudas (CRF/MDO) de esta marca en este rango+región — sin
-                 // redondear ni convertir a %, para poder sumarlas entre los 4 rangos y obtener
-                 // la participación de la marca a nivel PLANOGRAMA (ver getPlanogramaShare()).
                  bci:bci, bcu:bcu, bdi:bdi, bdu:bdu});
   });
   marcas.sort((a,b)=>b.pi-a.pi);
@@ -836,7 +902,7 @@ function buildNode(rowsArr, region){
   const nm   = marcas.length;
   const ncrf = marcas.filter(x=>x.c===1).length;
   const nnc  = marcas.filter(x=>x.c===0).length;
-  const nrec = marcas.filter(x=>x.r===1).length;
+  const nrec = marcas.filter(x=>x.r1||x.r2||x.r3).length;
 
   return {et:et, ec:ec, em:em, ci:Math.round(ci), cu:Math.round(cu), di:Math.round(di), du:Math.round(du),
           pci:pci, pmi:pmi, pcu:pcu, pmu:pmu, pc:pc, pm:pm,
@@ -862,12 +928,13 @@ const PARSE_WORKER_SRC = `
 self.importScripts('https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js');
 
 const COL = {
-  EAN: 0, SECCION: 1, PLANOGRAMA: 2, UN: 3, DESCRIPCION: 4, MARCA: 6, CATEGORIA: 7,
-  RANGO: 21, RANGO_UN: 22,
+  EAN: 0, SECCION: 1, PLANOGRAMA: 2, UN: 3, DESCRIPCION: 4,
+  STATUS_FC: 5, FABRICANTE: 6, MARCA: 7, CATEGORIA: 8,
+  RANGO: 22, RANGO_UN: 23,
 };
 const REGION_BLOCK_HEADERS = ['CRF $','%PG $','%UN $','CRF uni','%PG uni','%UN uni','MDO $','%PG $','%UN $','MDO uni','%PG uni','%UN uni'];
 const EXPECTED_HEADERS = [
-  'EAN','SECCI\u00d3N','PLANOGRAMA','UN','DESCRIPCI\u00d3N','FABRICANTE','MARCA','CATEGOR\u00cdA',
+  'EAN','SECCI\u00d3N','PLANOGRAMA','UN','DESCRIPCI\u00d3N','STATUS_FC','FABRICANTE','MARCA','CATEGOR\u00cdA',
   'CRF UNIDADES','CRF IMPORTE NETO','MDO UNIDADES','MDO IMPORTE NETO','MDO UNIDADES','MDO NETO',
   'PLANO-MARCA','UN-MARCA','PRECIO','PRECIO PLANO','PRECIO UN','PRECIO PROMEDIO PLANO MARCA','PRECIO PROMEDIO UN MARCA',
   'RANGO PLANOGRAMA','RANGO UN',
@@ -884,14 +951,12 @@ const EXPECTED_HEADERS = [
 function validarColumnas(allRows){
   const headerRow = allRows[2] || [];
   const errores = [];
-  const n = Math.max(EXPECTED_HEADERS.length, headerRow.length);
-  for(let i=0;i<n;i++){
-    const esperado = EXPECTED_HEADERS[i];
-    const real = String(headerRow[i]==null?'':headerRow[i]).trim();
-    if(esperado===undefined){
-      errores.push('Columna ' + (i+1) + ': columna inesperada "' + real + '"');
-    } else if(real!==esperado){
-      errores.push('Columna ' + (i+1) + ': se esperaba "' + esperado + '" y se encontr\u00f3 "' + (real||'(vac\u00edo)') + '"');
+  const norm = s => String(s==null?'':s).trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  for(let i=0;i<EXPECTED_HEADERS.length;i++){
+    const real = norm(headerRow[i]);
+    const esp  = norm(EXPECTED_HEADERS[i]);
+    if(real!==esp){
+      errores.push('Columna ' + (i+1) + ': se esperaba "' + EXPECTED_HEADERS[i] + '" y se encontr\u00f3 "' + (String(headerRow[i]==null?'':headerRow[i]).trim()||'(vac\u00edo)') + '"');
     }
   }
   return errores;
@@ -918,6 +983,7 @@ self.onmessage = function (e) {
       r[COL.PLANOGRAMA] = String(r[COL.PLANOGRAMA]).trim();
       r[COL.UN]         = String(r[COL.UN]).trim();
       r[COL.MARCA]      = String(r[COL.MARCA]).trim();
+      r[COL.STATUS_FC]  = String(r[COL.STATUS_FC]||'').trim();
       r[COL.RANGO]      = String(r[COL.RANGO]||'').trim();
       r[COL.RANGO_UN]   = String(r[COL.RANGO_UN]||'').trim();
     });
@@ -977,10 +1043,19 @@ document.getElementById('fileInput').addEventListener('change', function () {
         } else {
           setStatus('\u2717 El archivo no coincide con el formato esperado', false);
           console.warn('Diferencias de columnas detectadas en la hoja "Export":\n' + data.errores.join('\n'));
+          const primeros = data.errores.slice(0, 5);
+          const resto    = data.errores.length > 5 ? `\n(y ${data.errores.length - 5} diferencia(s) m\u00e1s \u2014 ver consola)` : '';
           if (window.Swal) {
-            Swal.fire({ icon: 'warning', title: 'El archivo seleccionado no es correcto' });
+            Swal.fire({
+              icon: 'warning',
+              title: 'El archivo seleccionado no es correcto',
+              html: '<div style="text-align:left;font-size:12px;font-family:monospace;max-height:220px;overflow-y:auto">'
+                  + primeros.map(e => `<div style="margin:4px 0;padding:4px 6px;background:#fef3c7;border-radius:4px">${e}</div>`).join('')
+                  + (resto ? `<div style="margin-top:6px;color:#6b7280">${resto}</div>` : '')
+                  + '</div>',
+            });
           } else {
-            alert('El archivo seleccionado no es correcto');
+            alert('El archivo seleccionado no es correcto:\n\n' + primeros.join('\n') + resto);
           }
         }
         return;
