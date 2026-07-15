@@ -72,6 +72,22 @@
       border: 1px solid rgba(255,255,255,.4);
     }
     .upload-btn:hover { background: rgba(255,255,255,.28); }
+    .menu-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      background: rgba(255,255,255,.15);
+      color: #fff;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: background .15s;
+      border: 1px solid rgba(255,255,255,.4);
+    }
+    .menu-btn:hover { background: rgba(255,255,255,.28); }
 
     .export-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap;transition:background .15s}
     .export-btn:hover{background:#15803d}
@@ -217,11 +233,14 @@
     <h1 id="mainTitle">📊 Gráfico Participación — Carrefour</h1>
     <span id="SpanTituloGraficos" class="page-title">· Análisis por Región / Planograma / UN / Marca</span>
   </div>
-  <label class="upload-btn">
-    <input type="file" id="fileInput" accept=".xlsx" style="display:none">
-    &#128194; Cargar Excel
-  </label>
-  <span class="file-status" id="fileStatus">Sin archivo cargado</span>
+  <a href="../Menu.html" class="menu-btn">&#127968; Menú principal</a>
+  <div style="flex:1;display:flex;justify-content:flex-end;align-items:center;gap:12px">
+    <label class="upload-btn">
+      <input type="file" id="fileInput" accept=".xlsx" style="display:none">
+      &#128194; Cargar Excel
+    </label>
+    <span class="file-status" id="fileStatus">Sin archivo cargado</span>
+  </div>
 </header>
 
 <!-- FILTERS -->
@@ -313,17 +332,17 @@ const COL = {
   UN:              3,
   MARCA:           7,  // col H (Status_FC en F corrió todo +1)
   CATEGORIA:       8,  // col I
-  YTD_SH_IMP_2026: 108, // col DC
-  YTD_DIF_SH_IMP:  109, // col DD
-  YTD_SH_VOL_2026: 111, // col DG
-  YTD_DIF_SH_VOL:  112, // col DH
-  // Columnas de Progresión, columnas DJ a DO del Excel
-  YTD_PCT_PROG_RM_IMP:  113, // DJ - YTD % Prog RM $
-  YTD_PCT_PROG_CRF_IMP: 114, // DK - YTD % Prog CRF $
-  YTD_GAP_CRF_RM_IMP:   115, // DL - YTD GAP CRF vs RM $
-  YTD_PCT_PROG_RM_VOL:  116, // DM - YTD % Prog RM VOL
-  YTD_PCT_PROG_CRF_VOL: 117, // DN - YTD % Prog CRF VOL
-  YTD_GAP_CRF_RM_VOL:   118, // DO - YTD GAP CRF vs RM VOL
+  YTD_SH_IMP_2026: 109, // YTD Share $ 2026
+  YTD_DIF_SH_IMP:  110, // YTD Dif Sh $
+  YTD_SH_VOL_2026: 112, // YTD Share VOL 2026
+  YTD_DIF_SH_VOL:  113, // YTD Dif Sh VOL
+  // Columnas de Progresión
+  YTD_PCT_PROG_RM_IMP:  114, // YTD % Prog RM $
+  YTD_PCT_PROG_CRF_IMP: 115, // YTD % Prog CRF $
+  YTD_GAP_CRF_RM_IMP:   116, // YTD GAP CRF vs RM $
+  YTD_PCT_PROG_RM_VOL:  117, // YTD % Prog RM VOL
+  YTD_PCT_PROG_CRF_VOL: 118, // YTD % Prog CRF VOL
+  YTD_GAP_CRF_RM_VOL:   119, // YTD GAP CRF vs RM VOL
 };
 
 // ============================================================
@@ -441,9 +460,9 @@ self.importScripts('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.
 
 const COL = {
   SECCION: 1, PLANOGRAMA: 2, UN: 3, MARCA: 7, CATEGORIA: 8,
-  YTD_SH_IMP_2026: 108, YTD_DIF_SH_IMP: 109, YTD_SH_VOL_2026: 111, YTD_DIF_SH_VOL: 112,
-  YTD_PCT_PROG_RM_IMP: 113, YTD_PCT_PROG_CRF_IMP: 114, YTD_GAP_CRF_RM_IMP: 115,
-  YTD_PCT_PROG_RM_VOL: 116, YTD_PCT_PROG_CRF_VOL: 117, YTD_GAP_CRF_RM_VOL: 118,
+  YTD_SH_IMP_2026: 109, YTD_DIF_SH_IMP: 110, YTD_SH_VOL_2026: 112, YTD_DIF_SH_VOL: 113,
+  YTD_PCT_PROG_RM_IMP: 114, YTD_PCT_PROG_CRF_IMP: 115, YTD_GAP_CRF_RM_IMP: 116,
+  YTD_PCT_PROG_RM_VOL: 117, YTD_PCT_PROG_CRF_VOL: 118, YTD_GAP_CRF_RM_VOL: 119,
 };
 const REGION_BLOCK_HEADERS = ['CRF $','%PG $','%UN $','CRF uni','%PG uni','%UN uni','MDO $','%PG $','%UN $','MDO uni','%PG uni','%UN uni'];
 const EXPECTED_HEADERS = [
@@ -519,7 +538,7 @@ self.onmessage = function (e) {
         YTD_GAP_CRF_RM_VOL:   parseFloat(row[COL.YTD_GAP_CRF_RM_VOL])   || 0,
       };
       Object.keys(REGION_BASE).forEach((region) => {
-        const start = REGION_BASE[region] - 1;
+        const start = REGION_BASE[region];
         METRICAS.forEach((metrica, offset) => {
           obj[region + '|' + metrica] = parseFloat(row[start + offset]) || 0;
         });

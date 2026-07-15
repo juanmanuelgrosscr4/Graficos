@@ -110,6 +110,22 @@ header span{font-size:12px;opacity:.75;display:block;margin-top:2px}
   border: 1px solid rgba(255,255,255,.4);
 }
 .upload-btn:hover { background: rgba(255,255,255,.28); }
+.menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: rgba(255,255,255,.15);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background .15s;
+  border: 1px solid rgba(255,255,255,.4);
+}
+.menu-btn:hover { background: rgba(255,255,255,.28); }
 .file-status { font-size: 11px; color: rgba(255,255,255,.75); white-space: nowrap; }
 .file-status.loaded { color: #fff; font-weight: 600; }
 .processing-overlay {
@@ -139,11 +155,14 @@ header span{font-size:12px;opacity:.75;display:block;margin-top:2px}
     <h1 id="mainTitle">🔺 Pirámide de Segmentación — Carrefour</h1>
     <span id="subTitle">· Análisis por Región / Planograma / UN / Marca</span>
   </div>
-  <label class="upload-btn">
-    <input type="file" id="fileInput" accept=".xlsx" style="display:none">
-    &#128194; Cargar Excel
-  </label>
-  <span class="file-status" id="fileStatus">Sin archivo cargado</span>
+  <a href="../Menu.html" class="menu-btn">&#127968; Menú principal</a>
+  <div style="flex:1;display:flex;justify-content:flex-end;align-items:center;gap:12px">
+    <label class="upload-btn">
+      <input type="file" id="fileInput" accept=".xlsx" style="display:none">
+      &#128194; Cargar Excel
+    </label>
+    <span class="file-status" id="fileStatus">Sin archivo cargado</span>
+  </div>
 </header>
 <div class="filters">
   <div class="filter-group">
