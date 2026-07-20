@@ -86,12 +86,13 @@ select[multiple] { resize: none; height: 62px; }
 .vbar-sep { width: 1px; height: 18px; background: #e2e8f0; margin: 0 4px; }
 .vbar-chk { display:flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:#475569; cursor:pointer; user-select:none; }
 .vbar-chk input { cursor:pointer; accent-color:#1d4ed8; width:14px; height:14px; }
+.vbar-sel { font-size:11px; font-weight:600; color:#475569; border:1px solid #cbd5e1; border-radius:6px; padding:3px 6px; background:#fff; cursor:pointer; font-family:inherit; }
 
 /* ── Body ── */
 #body { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow-y: auto; overflow-x: hidden; }
 
 /* Chart area — altura fija, el gráfico no responde al resize de ventana */
-#chartArea { height: 350px; flex-shrink: 0; position: relative; }
+#chartArea { height: 330px; flex-shrink: 0; position: relative; }
 #chart     { position: absolute; inset: 0; width: 100%; height: 100%; }
 
 /* Leyenda: solo bloquear clicks en ítems; el hover del gráfico funciona con
@@ -133,11 +134,17 @@ select[multiple] { resize: none; height: 62px; }
 .fbtn-r3.active { background: #5b21b6; color: #fff; border-color: #5b21b6; }
 .fbtn-r4.active { background: #0f766e; color: #fff; border-color: #0f766e; }
 .fbtn-exp {
-  margin-left: auto; padding: 3px 10px; border: 1px solid #16a34a; border-radius: 6px;
+  padding: 3px 10px; border: 1px solid #16a34a; border-radius: 6px;
   background: #f0fdf4; font-size: 11px; font-weight: 600;
   cursor: pointer; color: #15803d; font-family: inherit;
 }
 .fbtn-exp:hover { background: #16a34a; color: #fff; }
+.fbtn-exp2 {
+  margin-left: auto; padding: 3px 10px; border: 1px solid #16a34a; border-radius: 6px;
+  background: #f0fdf4; font-size: 11px; font-weight: 600;
+  cursor: pointer; color: #15803d; font-family: inherit;
+}
+.fbtn-exp2:hover { background: #16a34a; color: #fff; }
 #recBody { }
 .no-data  { color: #94a3b8; font-size: 12px; padding: 10px 20px; }
 .rec-hint { color: #94a3b8; font-size: 12px; padding: 10px 20px; font-style: italic; }
@@ -257,6 +264,13 @@ select[multiple] { resize: none; height: 62px; }
 }
 .processing-overlay span { color: #fff; font-size: 14px; font-weight: 600; }
 @keyframes spin { to { transform: rotate(360deg); } }
+/* Borde negro en texto de segmentos de barra para contraste */
+#chart .barlayer text {
+  paint-order: stroke fill;
+  stroke: rgba(0,0,0,0.8);
+  stroke-width: 2.5px;
+  stroke-linejoin: round;
+}
 </style>
 </head>
 <body>
@@ -314,9 +328,13 @@ select[multiple] { resize: none; height: 62px; }
   <button class="vbtn"        id="vC" onclick="setView('cob')">% Cobertura</button>
   <button class="vbtn"        id="vP" onclick="setView('part')">% Participación</button>
   <div class="vbar-sep"></div>
+  <select id="selSec" class="vbar-sel" onchange="onSecChange()">
+    <option value="__ALL__">— Todas las secciones —</option>
+  </select>
+  <div class="vbar-sep"></div>
   <label class="vbar-chk">
     <input type="checkbox" id="chkBarText" onchange="showBarText=this.checked; render();">
-    Mostrar valores en barras
+    Ver valores por segmento
   </label>
 </div>
 
@@ -336,7 +354,8 @@ select[multiple] { resize: none; height: 62px; }
       <button class="fbtn fbtn-r2" id="rf2" onclick="setRF('r2')">Rec. Marca si CRF</button>
       <button class="fbtn fbtn-r3" id="rf3" onclick="setRF('r3')">Rec. EAN no CRF</button>
       <button class="fbtn fbtn-r4" id="rf4" onclick="setRF('r4')">Rec. 1 Cadena</button>
-      <button class="fbtn fbtn-exp" onclick="exportRec()">⬇ Exportar Excel</button>
+      <button class="fbtn fbtn-exp2" onclick="exportChart()">⬇ Exportar Gráfico visible</button>
+      <button class="fbtn fbtn-exp"  onclick="exportRec()" style="margin-left:6px;">⬇ Exportar Recomendaciones</button>
     </div>
     <div id="recBody"><div class="rec-hint">Seleccioná un filtro para ver recomendaciones.</div></div>
   </div>
@@ -353,6 +372,8 @@ const REGION_BASE_START = 24, REGION_STEP = 12;
 const REGIONS = ['TOTAL NACIONAL','NOA','LITORAL','CUYO','CÓRDOBA','BS AS','PATAGONIA'];
 const RB = {};
 REGIONS.forEach((r,i) => { RB[r] = REGION_BASE_START + i * REGION_STEP; });
+// Bases de todas las regiones (para conteo de refs región-independiente)
+const ALL_RBS = REGIONS.map((_,i) => REGION_BASE_START + i * REGION_STEP);
 const RANGOS = ['BAJO','MEDIO','ALTO','ALTA GAMA'];
 
 // Paleta por segmento (uniforme para CRF y competidores)
@@ -367,12 +388,14 @@ const LOGO_FILE = name => name === 'CRF' ? 'CARREFOUR' : name;
 // ── Estado ─────────────────────────────────────────────────────
 let ALLDATA   = [];
 let COMP_COLS = [];
+let CRF_COL   = -1;   // índice de la columna de presencia CARREFOUR en el Excel
 let viewMode    = 'refs';
 let rfMode      = 'none';   // no muestra recomendaciones hasta que el usuario toque un botón
 let showBarText = false;
 
 // ── DOM ────────────────────────────────────────────────────────
 const selReg  = document.getElementById('selReg');
+const selSec  = document.getElementById('selSec');
 const selPg   = document.getElementById('selPg');
 const selUN   = document.getElementById('selUN');
 const selMk   = document.getElementById('selMk');
@@ -503,10 +526,15 @@ document.getElementById('fi').addEventListener('change', e => {
       }
       ALLDATA   = d.allData;
       COMP_COLS = d.compCols;
+      CRF_COL   = d.crfCol ?? -1;
       // Competitor selector: all selected by default (updated dynamically in render)
       selComp.innerHTML = `<option value="${ALL_OPT}" selected>— Todos —</option>`
         + COMP_COLS.map(c => `<option value="${c.name}" selected>${c.name}</option>`).join('');
       setAllOpt(selComp);
+      // Sección
+      const secs = [...new Set(ALLDATA.map(r => r[COL.SECCION]).filter(Boolean))].sort();
+      selSec.innerHTML = `<option value="__ALL__">— Todas las secciones —</option>`
+        + secs.map(s => `<option value="${s}">${s}</option>`).join('');
       // Planograma
       const pls = [...new Set(ALLDATA.map(r => r[COL.PLANOGRAMA]))].sort();
       selPg.innerHTML = `<option value="__TOT__" selected>— TOTAL SURTIDO —</option>`
@@ -524,10 +552,27 @@ document.getElementById('fi').addEventListener('change', e => {
 });
 
 // ── Filter helpers ─────────────────────────────────────────────
+// Base de datos filtrada por Sección (o todo si __ALL__)
+function getSecBase(){
+  const sec = selSec.value;
+  return sec === '__ALL__' ? ALLDATA : ALLDATA.filter(r => r[COL.SECCION] === sec);
+}
+
+function onSecChange(){
+  const base = getSecBase();
+  // Reconstruir Planograma
+  const pls = [...new Set(base.map(r => r[COL.PLANOGRAMA]))].sort();
+  selPg.innerHTML = `<option value="__TOT__" selected>— TOTAL SURTIDO —</option>`
+    + pls.map(p => `<option value="${p}">${p}</option>`).join('');
+  setAllOpt(selPg);
+  onPgChange();
+}
+
 function onPgChange(){
+  const base = getSecBase();
   const pgs = getSel(selPg);
   const isT = pgs.includes('__TOT__') || !pgs.length;
-  let rows = isT ? ALLDATA : ALLDATA.filter(r => pgs.includes(r[COL.PLANOGRAMA]));
+  let rows = isT ? base : base.filter(r => pgs.includes(r[COL.PLANOGRAMA]));
   // UN
   const uns = [...new Set(rows.map(r => r[COL.UN]))].sort();
   selUN.innerHTML = `<option value="${ALL_OPT}" selected>— Todas —</option>`
@@ -542,7 +587,7 @@ function onPgChange(){
 }
 
 function getRows(){
-  let rows = ALLDATA;
+  let rows = getSecBase();
   const rbs = getRBs();
   const pgs = getSel(selPg);
   const isT = pgs.includes('__TOT__') || !pgs.length;
@@ -565,35 +610,64 @@ function getRows(){
 // ── Cálculo ────────────────────────────────────────────────────
 function num(v){ return parseFloat(v) || 0; }
 
-// rows    = universo de presencia (sin filtro MDO) → para contar referencias
-// rowsMdo = idem con MDO$ > 0 → denominador/numerador de cobertura y participación
-function calcComp(rows, rowsMdo, rbs, isCRF, col){
+// rowsRef = universo seleccionado sin filtro de cadenas ni MDO → base de referencias
+// rowsMdo = ≥2 cadenas + MDO$ > 0 → base de cob/part para competidores
+// isCRF   = true → usa CRF$ como métrica de ventas; refs = región-independiente (ALL_RBS)
+function calcComp(rowsRef, rowsMdo, rbs, isCRF, col){
   const sumMdo = r => rbs.reduce((s,rb) => s + num(r[rb+6]), 0);
-  const hasCov = r => isCRF ? rbs.some(rb => num(r[rb+3]) > 0) : num(r[col]) > 0;
+  const sumCRF = r => rbs.reduce((s,rb) => s + num(r[rb+3]), 0);
+  // refs: columna de presencia binaria (CARREFOUR para CRF, columna propia para competidores)
+  const hasCovRef = r => num(r[col]) > 0;
+  // cob/part: para CRF se usan solo las regiones seleccionadas
+  const hasCov    = r => isCRF ? rbs.some(rb => num(r[rb+3]) > 0)     : num(r[col]) > 0;
   const out = {};
   RANGOS.forEach(seg => {
-    const sr       = rows.filter(r => r[COL.RANGO] === seg);
-    const srMdo    = rowsMdo.filter(r => r[COL.RANGO] === seg);
-    const mdo      = srMdo.reduce((s,r) => s + sumMdo(r), 0);
-    const cov      = sr.filter(hasCov);             // refs: presencia sin MDO
-    const covMdoR  = srMdo.filter(hasCov);          // cob/part: presencia con MDO
-    out[seg] = {
-      total:       srMdo.length,                    // denominador cob (con MDO)
-      cov:         cov.length,                      // numerador refs
-      covMdoCount: covMdoR.length,                  // numerador cob
-      mdo,
-      covMdo:      covMdoR.reduce((s,r) => s + sumMdo(r), 0),
-    };
+    const sr     = rowsRef.filter(r => r[COL.RANGO] === seg);
+    const cov    = sr.filter(hasCovRef);   // refs (región-independiente para CRF)
+    if(isCRF){
+      const covSales      = sr.filter(hasCov);                             // EANs rowsRef con ventas CRF (para mdo/covMdo)
+      const srMdo         = rowsMdo.filter(r => r[COL.RANGO] === seg);
+      const crfInUniverse = srMdo.filter(hasCovRef);                       // EANs universo ≥2 cadenas con presencia CRF
+      out[seg] = {
+        total:       sr.length,
+        cov:         cov.length,                                            // refs: presencia CRF desde rowsRef
+        covMdoCount: crfInUniverse.length,                                  // cob: CRF en universo ≥2 cadenas, este segmento
+        mdo:         covSales.reduce((s,r) => s + sumCRF(r), 0),
+        covMdo:      covSales.reduce((s,r) => s + sumCRF(r), 0),
+      };
+    } else {
+      const srMdo   = rowsMdo.filter(r => r[COL.RANGO] === seg);
+      const covMdoR = srMdo.filter(hasCov);
+      out[seg] = {
+        total:       srMdo.length,
+        cov:         cov.length,
+        covMdoCount: covMdoR.length,
+        mdo:         srMdo.reduce((s,r) => s + sumMdo(r), 0),
+        covMdo:      covMdoR.reduce((s,r) => s + sumMdo(r), 0),
+      };
+    }
   });
-  const covRows    = rows.filter(hasCov);
-  const covMdoRows = rowsMdo.filter(hasCov);
-  out._t = {
-    total:       rowsMdo.length,
-    cov:         covRows.length,
-    covMdoCount: covMdoRows.length,
-    mdo:         rowsMdo.reduce((s,r) => s + sumMdo(r), 0),
-    covMdo:      covMdoRows.reduce((s,r) => s + sumMdo(r), 0),
-  };
+  const covRef = rowsRef.filter(hasCovRef);
+  if(isCRF){
+    const covSalesAll    = rowsRef.filter(hasCov);
+    const crfInUnivAll   = rowsMdo.filter(hasCovRef);               // CRF en universo ≥2 cadenas (total)
+    out._t = {
+      total:       rowsRef.length,
+      cov:         covRef.length,
+      covMdoCount: crfInUnivAll.length,                             // cob: CRF en universo ≥2 cadenas
+      mdo:         covSalesAll.reduce((s,r) => s + sumCRF(r), 0),
+      covMdo:      covSalesAll.reduce((s,r) => s + sumCRF(r), 0),
+    };
+  } else {
+    const covMdoRows = rowsMdo.filter(hasCov);
+    out._t = {
+      total:       rowsMdo.length,
+      cov:         covRef.length,
+      covMdoCount: covMdoRows.length,
+      mdo:         rowsMdo.reduce((s,r) => s + sumMdo(r), 0),
+      covMdo:      covMdoRows.reduce((s,r) => s + sumMdo(r), 0),
+    };
+  }
   return out;
 }
 
@@ -613,11 +687,20 @@ function totVal(d, mktT, mktM){
 // ── Render ─────────────────────────────────────────────────────
 function render(){
   if(!ALLDATA.length) return;
-  const rows    = getRows();
+  const rows    = getRows();           // ≥2 cadenas, sin MDO → universo cob/part
   const rbs     = getRBs();
   const sumMdo  = r => rbs.reduce((s,rb) => s + num(r[rb+6]), 0);
-  // rowsMdo: universo con venta → denominador y numerador de cobertura/participación
+  // rowsMdo: ≥2 cadenas + MDO > 0 → denominador y numerador de cobertura/participación
   const rowsMdo = rows.filter(r => rbs.some(rb => num(r[rb+6]) > 0));
+  // rowsRef: sección + planograma/UN/marca, sin restricción de cadenas ni MDO
+  //          → conteo real de referencias por cadena (región-independiente)
+  let rowsRef = getSecBase();
+  const _pgsR = getSel(selPg); const _isTR = _pgsR.includes('__TOT__') || !_pgsR.length;
+  if(!_isTR) rowsRef = rowsRef.filter(r => _pgsR.includes(r[COL.PLANOGRAMA]));
+  const _unsR = getSel(selUN).filter(v => v !== ALL_OPT);
+  if(_unsR.length) rowsRef = rowsRef.filter(r => _unsR.includes(r[COL.UN]));
+  const _mksR = getSel(selMk).filter(v => v !== ALL_OPT);
+  if(_mksR.length) rowsRef = rowsRef.filter(r => _mksR.includes(r[COL.MARCA]));
 
   // Mercado total por segmento (con venta, para cob/part)
   const mkt = {};
@@ -631,7 +714,7 @@ function render(){
   // ─ Calcular TODOS los competidores y ver cuáles tienen presencia ─
   const allCompData = {};
   COMP_COLS.forEach(c => {
-    const d = calcComp(rows, rowsMdo, rbs, false, c.col);
+    const d = calcComp(rowsRef, rowsMdo, rbs, false, c.col);
     if(d._t.cov > 0) allCompData[c.name] = d;
   });
   const activeNames = COMP_COLS.map(c => c.name).filter(n => allCompData[n]);
@@ -665,16 +748,32 @@ function render(){
     return;
   }
 
-  const crfD = calcComp(rows, rowsMdo, rbs, true, null);
+  const crfD = calcComp(rowsRef, rowsMdo, rbs, true, CRF_COL);
 
   const compsD = {};
   COMP_COLS.filter(c => visNames.includes(c.name) && allCompData[c.name]).forEach(c => {
     compsD[c.name] = allCompData[c.name];
   });
 
+  // ── Helpers de valor por barra ──
+  // Cobertura : covMdoCount / mktT  (EANs del competidor en universo ≥2 cadenas / total universo)
+  // Participación: cov / fullD._t.cov  (distribución del surtido propio por segmento)
+  function getBarSegVal(n, segD, fullD){
+    if(viewMode === 'refs') return segD.cov;
+    if(viewMode === 'cob')  return mktT > 0 ? segD.covMdoCount / mktT * 100 : 0;
+    if(viewMode === 'part') return fullD._t.cov > 0 ? segD.cov / fullD._t.cov * 100 : 0;
+    return 0;
+  }
+  function getBarTotVal(n, d){
+    if(viewMode === 'refs') return d._t.cov;
+    if(viewMode === 'cob')  return mktT > 0 ? d._t.covMdoCount / mktT * 100 : 0;
+    if(viewMode === 'part') return d._t.cov;   // anotación muestra cantidad de refs propias
+    return 0;
+  }
+
   // Ordenar por valor total DESC
   const sorted = Object.entries(compsD)
-    .sort((a,b) => totVal(b[1], mktT, mktM) - totVal(a[1], mktT, mktM))
+    .sort((a,b) => getBarTotVal(b[0], b[1]) - getBarTotVal(a[0], a[1]))
     .map(([n]) => n);
 
   const labels = ['CRF', ...sorted];
@@ -682,8 +781,9 @@ function render(){
   const traces = RANGOS.map(seg => {
     const mktSeg = mkt[seg];
     const yVals = labels.map(n => {
-      const d = n==='CRF' ? crfD[seg] : compsD[n]?.[seg];
-      return d ? segVal(d, mktT, mktM) : 0;
+      const fullD = n==='CRF' ? crfD : compsD[n];
+      const segD  = fullD?.[seg];
+      return segD ? getBarSegVal(n, segD, fullD) : 0;
     });
     const dispVals = labels.map((n, i) => {
       const sv = yVals[i];
@@ -699,6 +799,8 @@ function render(){
       textposition: 'inside',
       insidetextanchor: 'middle',
       textfont: { size:10, color:'#fff', family:'Segoe UI' },
+      textangle: 0,
+      constraintext: 'none',
       marker: { color: RC[seg] },
       // Tooltip: nombre + segmento + valor del modo actual
       hovertemplate:
@@ -714,20 +816,20 @@ function render(){
     const d = n==='CRF' ? crfD : compsD[n]; if(!d) return null;
     const barTop = RANGOS.reduce((sum, seg) => {
       const sd = d[seg]; if(!sd) return sum;
-      return sum + segVal(sd, mktT, mktM);
+      return sum + getBarSegVal(n, sd, d);
     }, 0);
-    const v = totVal(d, mktT, mktM);
+    const v = getBarTotVal(n, d);
     return {
       x:n, y:barTop, xref:'x', yref:'y',
-      showarrow:false, yanchor:'bottom', yshift:4,
-      text: viewMode==='refs' ? Math.round(v).toString() : v.toFixed(1)+'%',
-      font:{ size:11, color:'#1e293b', family:'Segoe UI' },
+      showarrow:false, yanchor:'bottom', yshift: showBarText ? 10 : 4,
+      text: viewMode==='cob' ? v.toFixed(1)+'%' : Math.round(v).toString(),
+      font:{ size:13, color:'#1e293b', family:'Segoe UI' },
     };
   }).filter(Boolean);
 
   const yTitle = viewMode==='refs' ? 'N° de referencias'
                : viewMode==='cob'  ? '% Cobertura'
-               :                     '% Participación MDO$';
+               :                     '% Participación';
 
   // Calcular bargap para que cada barra no supere 93 px de ancho
   const _plotW   = document.getElementById('chart').offsetWidth - 52 - 20; // ancho - margin l - r
@@ -891,6 +993,96 @@ function getRecBrands(rows, rbs){
     else if(rfMode === 'r3') ms = ms.filter(x => x.r3);
   }
   return { ms, sumMdo, r4totMdo };
+}
+
+// ── Exportar gráfico visible a Excel ──────────────────────────
+function exportChart(){
+  if(!ALLDATA.length){
+    if(window.Swal) Swal.fire({icon:'info', title:'Sin datos', text:'Cargá un archivo primero.'});
+    else alert('Cargá un archivo primero.');
+    return;
+  }
+  const rows    = getRows();
+  const rbs     = getRBs();
+  const sumMdo  = r => rbs.reduce((s,rb) => s + num(r[rb+6]), 0);
+  const rowsMdo = rows.filter(r => rbs.some(rb => num(r[rb+6]) > 0));
+
+  // rowsRef (mismo cálculo que render)
+  let rowsRef = getSecBase();
+  const _pgsR = getSel(selPg); const _isTR = _pgsR.includes('__TOT__') || !_pgsR.length;
+  if(!_isTR) rowsRef = rowsRef.filter(r => _pgsR.includes(r[COL.PLANOGRAMA]));
+  const _unsR = getSel(selUN).filter(v => v !== ALL_OPT);
+  if(_unsR.length) rowsRef = rowsRef.filter(r => _unsR.includes(r[COL.UN]));
+  const _mksR = getSel(selMk).filter(v => v !== ALL_OPT);
+  if(_mksR.length) rowsRef = rowsRef.filter(r => _mksR.includes(r[COL.MARCA]));
+
+  const mktT = rowsMdo.length;
+  const mktM = rowsMdo.reduce((s,r) => s + sumMdo(r), 0);
+
+  const crfD = calcComp(rowsRef, rowsMdo, rbs, true, CRF_COL);
+
+  // Competidores visibles
+  const allCompData = {};
+  COMP_COLS.forEach(c => {
+    const d = calcComp(rowsRef, rowsMdo, rbs, false, c.col);
+    if(d._t.cov > 0) allCompData[c.name] = d;
+  });
+  const activeNames  = COMP_COLS.map(c => c.name).filter(n => allCompData[n]);
+  const selCompVals  = getSel(selComp).filter(v => v !== ALL_OPT);
+  const visNames     = selCompVals.length ? selCompVals : activeNames;
+  const compsD       = {};
+  COMP_COLS.filter(c => visNames.includes(c.name) && allCompData[c.name])
+           .forEach(c => { compsD[c.name] = allCompData[c.name]; });
+
+  // Helpers de valor — misma lógica que getBarSegVal/getBarTotVal en render()
+  function segV(n, sd, fullD){
+    return {
+      refs: sd.cov,
+      cob:  mktT > 0 ? sd.covMdoCount / mktT * 100 : 0,
+      part: fullD._t.cov > 0 ? sd.cov / fullD._t.cov * 100 : 0,
+    };
+  }
+  function totV(n, d){
+    return {
+      refs: d._t.cov,
+      cob:  mktT > 0 ? d._t.covMdoCount / mktT * 100 : 0,
+      part: d._t.cov,   // refs count (anotación en modo part)
+    };
+  }
+
+  // Ordenar competidores por refs total DESC (igual que el gráfico en modo refs)
+  const sorted = Object.keys(compsD).sort((a,b) => totV(b, compsD[b]).refs - totV(a, compsD[a]).refs);
+  const labels = ['CRF', ...sorted];
+
+  const regionStr = getSel(selReg).join(' / ');
+  const secStr    = selSec.value === '__ALL__' ? 'Todas' : selSec.value;
+
+  const dataRows = [['Región','Sección','Cadena','Segmento','Referencias','% Cobertura','% Participación']];
+  labels.forEach(n => {
+    const d = n==='CRF' ? crfD : compsD[n]; if(!d) return;
+    RANGOS.forEach(seg => {
+      const sd = d[seg]; if(!sd) return;
+      const v = segV(n, sd, d);
+      dataRows.push([regionStr, secStr, n, seg,
+        v.refs,
+        parseFloat(v.cob.toFixed(2)),
+        parseFloat(v.part.toFixed(2)),
+      ]);
+    });
+    const t = totV(n, d);
+    dataRows.push([regionStr, secStr, n, 'TOTAL',
+      t.refs,
+      parseFloat(t.cob.toFixed(2)),
+      parseFloat(t.part.toFixed(2)),
+    ]);
+  });
+
+  const wb  = XLSX.utils.book_new();
+  const ws  = XLSX.utils.aoa_to_sheet(dataRows);
+  ws['!cols'] = [14,14,22,12,14,14,16].map(w => ({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws, 'Gráfico visible');
+  const fecha = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `Grafico_Cobertura_${fecha}.xlsx`);
 }
 
 // ── Exportar recomendaciones a Excel ──────────────────────────
@@ -1117,9 +1309,15 @@ self.onmessage = function(e){
 
     const hdr = allRows[2] || [];
     const compCols = [];
+    let crfCol = -1;
     for(let i = 120; i < hdr.length; i++){
       const nm = String(hdr[i]||'').trim();
-      if(nm && !nm.toUpperCase().includes('CARREFOUR')) compCols.push({name:nm, col:i});
+      if(!nm) continue;
+      if(nm.toUpperCase().includes('CARREFOUR')){
+        if(crfCol === -1) crfCol = i;  // primera columna CARREFOUR = presencia CRF
+      } else {
+        compCols.push({name:nm, col:i});
+      }
     }
 
     const dataRows = allRows.slice(3).filter(r => r[COL.PLANOGRAMA] && r[COL.UN] && r[COL.MARCA]);
@@ -1136,7 +1334,7 @@ self.onmessage = function(e){
       r[COL.RANGO]       = String(r[COL.RANGO]||'').trim();
     });
 
-    self.postMessage({ok:true, allData:dataRows, compCols, a1, b1});
+    self.postMessage({ok:true, allData:dataRows, compCols, crfCol, a1, b1});
   } catch(err){
     self.postMessage({ok:false, fatal:true, message:err.message});
   }
