@@ -83,6 +83,9 @@ select[multiple] { resize: none; height: 62px; }
   cursor: pointer; color: #475569; white-space: nowrap; font-family: inherit;
 }
 .vbtn.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+.vbar-sep { width: 1px; height: 18px; background: #e2e8f0; margin: 0 4px; }
+.vbar-chk { display:flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:#475569; cursor:pointer; user-select:none; }
+.vbar-chk input { cursor:pointer; accent-color:#1d4ed8; width:14px; height:14px; }
 
 /* ── Body ── */
 #body { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow-y: auto; overflow-x: hidden; }
@@ -128,6 +131,7 @@ select[multiple] { resize: none; height: 62px; }
 .fbtn-r1.active { background: #a16207; color: #fff; border-color: #a16207; }
 .fbtn-r2.active { background: #c2410c; color: #fff; border-color: #c2410c; }
 .fbtn-r3.active { background: #5b21b6; color: #fff; border-color: #5b21b6; }
+.fbtn-r4.active { background: #0f766e; color: #fff; border-color: #0f766e; }
 .fbtn-exp {
   margin-left: auto; padding: 3px 10px; border: 1px solid #16a34a; border-radius: 6px;
   background: #f0fdf4; font-size: 11px; font-weight: 600;
@@ -213,6 +217,7 @@ select[multiple] { resize: none; height: 62px; }
 .sbadge-r1 { background: #fef9c3; color: #a16207; }
 .sbadge-r2 { background: #ffedd5; color: #c2410c; }
 .sbadge-r3 { background: #ede9fe; color: #5b21b6; }
+.sbadge-r4 { background: #ccfbf1; color: #0f766e; }
 .seg-empty {
   padding: 12px;
   font-size: 11px;
@@ -308,6 +313,11 @@ select[multiple] { resize: none; height: 62px; }
   <button class="vbtn active" id="vR" onclick="setView('refs')">Referencias</button>
   <button class="vbtn"        id="vC" onclick="setView('cob')">% Cobertura</button>
   <button class="vbtn"        id="vP" onclick="setView('part')">% Participación</button>
+  <div class="vbar-sep"></div>
+  <label class="vbar-chk">
+    <input type="checkbox" id="chkBarText" onchange="showBarText=this.checked; render();">
+    Mostrar valores en barras
+  </label>
 </div>
 
 <!-- Main body (scrollable) -->
@@ -325,6 +335,7 @@ select[multiple] { resize: none; height: 62px; }
       <button class="fbtn fbtn-r1" id="rf1" onclick="setRF('r1')">Rec. Marca no CRF</button>
       <button class="fbtn fbtn-r2" id="rf2" onclick="setRF('r2')">Rec. Marca si CRF</button>
       <button class="fbtn fbtn-r3" id="rf3" onclick="setRF('r3')">Rec. EAN no CRF</button>
+      <button class="fbtn fbtn-r4" id="rf4" onclick="setRF('r4')">Rec. 1 Cadena</button>
       <button class="fbtn fbtn-exp" onclick="exportRec()">⬇ Exportar Excel</button>
     </div>
     <div id="recBody"><div class="rec-hint">Seleccioná un filtro para ver recomendaciones.</div></div>
@@ -356,8 +367,9 @@ const LOGO_FILE = name => name === 'CRF' ? 'CARREFOUR' : name;
 // ── Estado ─────────────────────────────────────────────────────
 let ALLDATA   = [];
 let COMP_COLS = [];
-let viewMode  = 'refs';
-let rfMode    = 'none';   // no muestra recomendaciones hasta que el usuario toque un botón
+let viewMode    = 'refs';
+let rfMode      = 'none';   // no muestra recomendaciones hasta que el usuario toque un botón
+let showBarText = false;
 
 // ── DOM ────────────────────────────────────────────────────────
 const selReg  = document.getElementById('selReg');
@@ -441,9 +453,9 @@ function setView(m){
 // ── Rec filter ─────────────────────────────────────────────────
 function setRF(f){
   rfMode = (rfMode === f) ? 'none' : f;
-  ['rf1','rf2','rf3'].forEach(id => document.getElementById(id).classList.remove('active'));
+  ['rf1','rf2','rf3','rf4'].forEach(id => document.getElementById(id).classList.remove('active'));
   if(rfMode !== 'none'){
-    document.getElementById({r1:'rf1', r2:'rf2', r3:'rf3'}[rfMode]).classList.add('active');
+    document.getElementById({r1:'rf1', r2:'rf2', r3:'rf3', r4:'rf4'}[rfMode]).classList.add('active');
   }
   renderRec();
 }
@@ -539,9 +551,7 @@ function getRows(){
   if(uns.length) rows = rows.filter(r => uns.includes(r[COL.UN]));
   const mks = getSel(selMk).filter(v => v !== ALL_OPT);
   if(mks.length) rows = rows.filter(r => mks.includes(r[COL.MARCA]));
-  // Solo EANs con MDO$ > 0 en al menos una región seleccionada
-  rows = rows.filter(r => rbs.some(rb => num(r[rb+6]) > 0));
-  // Presencia en ≥2 cadenas incluyendo CRF
+  // Presencia en ≥2 cadenas (MDO no requerido aquí — se filtra por separado para cob/part)
   rows = rows.filter(r => {
     let cnt = rbs.some(rb => num(r[rb+3]) > 0) ? 1 : 0;
     for(const c of COMP_COLS){
@@ -555,60 +565,73 @@ function getRows(){
 // ── Cálculo ────────────────────────────────────────────────────
 function num(v){ return parseFloat(v) || 0; }
 
-function calcComp(rows, rbs, isCRF, col){
+// rows    = universo de presencia (sin filtro MDO) → para contar referencias
+// rowsMdo = idem con MDO$ > 0 → denominador/numerador de cobertura y participación
+function calcComp(rows, rowsMdo, rbs, isCRF, col){
   const sumMdo = r => rbs.reduce((s,rb) => s + num(r[rb+6]), 0);
   const hasCov = r => isCRF ? rbs.some(rb => num(r[rb+3]) > 0) : num(r[col]) > 0;
   const out = {};
   RANGOS.forEach(seg => {
-    const sr     = rows.filter(r => r[COL.RANGO] === seg);
-    const mdo    = sr.reduce((s,r) => s + sumMdo(r), 0);
-    const cov    = sr.filter(hasCov);
-    const covMdo = cov.reduce((s,r) => s + sumMdo(r), 0);
-    out[seg] = { total:sr.length, cov:cov.length, mdo, covMdo };
+    const sr       = rows.filter(r => r[COL.RANGO] === seg);
+    const srMdo    = rowsMdo.filter(r => r[COL.RANGO] === seg);
+    const mdo      = srMdo.reduce((s,r) => s + sumMdo(r), 0);
+    const cov      = sr.filter(hasCov);             // refs: presencia sin MDO
+    const covMdoR  = srMdo.filter(hasCov);          // cob/part: presencia con MDO
+    out[seg] = {
+      total:       srMdo.length,                    // denominador cob (con MDO)
+      cov:         cov.length,                      // numerador refs
+      covMdoCount: covMdoR.length,                  // numerador cob
+      mdo,
+      covMdo:      covMdoR.reduce((s,r) => s + sumMdo(r), 0),
+    };
   });
-  const covRows = rows.filter(hasCov);
+  const covRows    = rows.filter(hasCov);
+  const covMdoRows = rowsMdo.filter(hasCov);
   out._t = {
-    total:  rows.length,
-    cov:    covRows.length,
-    mdo:    rows.reduce((s,r)  => s + sumMdo(r), 0),
-    covMdo: covRows.reduce((s,r) => s + sumMdo(r), 0),
+    total:       rowsMdo.length,
+    cov:         covRows.length,
+    covMdoCount: covMdoRows.length,
+    mdo:         rowsMdo.reduce((s,r) => s + sumMdo(r), 0),
+    covMdo:      covMdoRows.reduce((s,r) => s + sumMdo(r), 0),
   };
   return out;
 }
 
 function segVal(segD, mktTotal, mktMdo){
-  if(viewMode==='refs')  return segD.cov;
-  if(viewMode==='cob')   return mktTotal > 0 ? segD.cov / mktTotal * 100 : 0;
-  if(viewMode==='part')  return mktMdo   > 0 ? segD.covMdo / mktMdo * 100 : 0;
+  if(viewMode==='refs')  return segD.cov;                                         // EANs con presencia (sin MDO)
+  if(viewMode==='cob')   return mktTotal > 0 ? segD.covMdoCount / mktTotal * 100 : 0; // % sobre mercado con venta
+  if(viewMode==='part')  return mktMdo   > 0 ? segD.covMdo      / mktMdo   * 100 : 0; // % MDO$ con presencia
   return 0;
 }
 function totVal(d, mktT, mktM){
   if(viewMode==='refs')  return d._t.cov;
-  if(viewMode==='cob')   return mktT > 0 ? d._t.cov / mktT * 100 : 0;
-  if(viewMode==='part')  return mktM > 0 ? d._t.covMdo / mktM * 100 : 0;
+  if(viewMode==='cob')   return mktT > 0 ? d._t.covMdoCount / mktT * 100 : 0;
+  if(viewMode==='part')  return mktM > 0 ? d._t.covMdo      / mktM * 100 : 0;
   return 0;
 }
 
 // ── Render ─────────────────────────────────────────────────────
 function render(){
   if(!ALLDATA.length) return;
-  const rows = getRows();
-  const rbs  = getRBs();
-  const sumMdo = r => rbs.reduce((s,rb) => s + num(r[rb+6]), 0);
+  const rows    = getRows();
+  const rbs     = getRBs();
+  const sumMdo  = r => rbs.reduce((s,rb) => s + num(r[rb+6]), 0);
+  // rowsMdo: universo con venta → denominador y numerador de cobertura/participación
+  const rowsMdo = rows.filter(r => rbs.some(rb => num(r[rb+6]) > 0));
 
-  // Mercado total por segmento
+  // Mercado total por segmento (con venta, para cob/part)
   const mkt = {};
   RANGOS.forEach(seg => {
-    const sr = rows.filter(r => r[COL.RANGO] === seg);
-    mkt[seg] = { total:sr.length, mdo:sr.reduce((s,r) => s + sumMdo(r), 0) };
+    const srMdo = rowsMdo.filter(r => r[COL.RANGO] === seg);
+    mkt[seg] = { total:srMdo.length, mdo:srMdo.reduce((s,r) => s + sumMdo(r), 0) };
   });
-  const mktT = rows.length;
-  const mktM = rows.reduce((s,r) => s + sumMdo(r), 0);
+  const mktT = rowsMdo.length;
+  const mktM = rowsMdo.reduce((s,r) => s + sumMdo(r), 0);
 
   // ─ Calcular TODOS los competidores y ver cuáles tienen presencia ─
   const allCompData = {};
   COMP_COLS.forEach(c => {
-    const d = calcComp(rows, rbs, false, c.col);
+    const d = calcComp(rows, rowsMdo, rbs, false, c.col);
     if(d._t.cov > 0) allCompData[c.name] = d;
   });
   const activeNames = COMP_COLS.map(c => c.name).filter(n => allCompData[n]);
@@ -642,7 +665,7 @@ function render(){
     return;
   }
 
-  const crfD = calcComp(rows, rbs, true, null);
+  const crfD = calcComp(rows, rowsMdo, rbs, true, null);
 
   const compsD = {};
   COMP_COLS.filter(c => visNames.includes(c.name) && allCompData[c.name]).forEach(c => {
@@ -658,21 +681,24 @@ function render(){
 
   const traces = RANGOS.map(seg => {
     const mktSeg = mkt[seg];
+    const yVals = labels.map(n => {
+      const d = n==='CRF' ? crfD[seg] : compsD[n]?.[seg];
+      return d ? segVal(d, mktT, mktM) : 0;
+    });
+    const dispVals = labels.map((n, i) => {
+      const sv = yVals[i];
+      if(sv <= 0) return '';
+      return viewMode==='refs' ? Math.round(sv).toString() : sv.toFixed(1) + '%';
+    });
     return {
       name: seg, type:'bar', x:labels,
-      y: labels.map(n => {
-        const d = n==='CRF' ? crfD[seg] : compsD[n]?.[seg];
-        return d ? segVal(d, mktT, mktM) : 0;
-      }),
+      y: yVals,
       // customdata[0] = valor display según viewMode para ese segmento
-      customdata: labels.map(n => {
-        const d  = n==='CRF' ? crfD[seg] : compsD[n]?.[seg];
-        const sv = d ? segVal(d, mktT, mktM) : 0;
-        const disp = viewMode==='refs'
-          ? `${Math.round(sv)} ref.`
-          : sv.toFixed(1) + '%';
-        return [disp];
-      }),
+      customdata: dispVals.map(disp => [disp]),
+      text:         showBarText ? dispVals : labels.map(() => ''),
+      textposition: 'inside',
+      insidetextanchor: 'middle',
+      textfont: { size:10, color:'#fff', family:'Segoe UI' },
       marker: { color: RC[seg] },
       // Tooltip: nombre + segmento + valor del modo actual
       hovertemplate:
@@ -703,9 +729,15 @@ function render(){
                : viewMode==='cob'  ? '% Cobertura'
                :                     '% Participación MDO$';
 
+  // Calcular bargap para que cada barra no supere 93 px de ancho
+  const _plotW   = document.getElementById('chart').offsetWidth - 52 - 20; // ancho - margin l - r
+  const _slot    = _plotW / labels.length;
+  const _bargap  = Math.max(0, 1 - 93 / _slot);
+
   Plotly.react('chart', traces, {
     barmode: 'stack',
     height:  CHART_H,
+    bargap:  _bargap,
     margin:  { l:52, r:20, t:40, b:16 },
     paper_bgcolor: 'rgba(0,0,0,0)',
     plot_bgcolor:  'rgba(0,0,0,0)',
@@ -824,39 +856,72 @@ function getRecBrands(rows, rbs){
     const r2     = (c === 1 && bci > 0 && pi >= 3 && fcVals.some(v => v==='2' || v==='3')) ? 1 : 0;
     const miss   = computeT3(brows, rbs);
     const r3     = (c === 1 && miss.length > 0) ? 1 : 0;
-    return { m:marca, brows, c, r1, r2, r3, fcVals, miss, pi };
+    return { m:marca, brows, c, r1, r2, r3, r4:0, fcVals, miss, pi };
   }).sort((a,b) => b.pi - a.pi);
-  if(rfMode === 'r1')      ms = ms.filter(x => x.r1);
-  else if(rfMode === 'r2') ms = ms.filter(x => x.r2);
-  else if(rfMode === 'r3') ms = ms.filter(x => x.r3);
-  return { ms, sumMdo };
+
+  // ── R4: marcas con >3% MDO presentes en exactamente 1 cadena (CRF o competidor) ──
+  // Usa ALLDATA sin el filtro de ≥2 cadenas para capturar marcas de distribución escasa.
+  let r4totMdo = 0;
+  if(rfMode === 'r4'){
+    let r4rows = ALLDATA;
+    const pgs4 = getSel(selPg); const isT4 = pgs4.includes('__TOT__') || !pgs4.length;
+    if(!isT4) r4rows = r4rows.filter(r => pgs4.includes(r[COL.PLANOGRAMA]));
+    const uns4 = getSel(selUN).filter(v => v !== ALL_OPT);
+    if(uns4.length) r4rows = r4rows.filter(r => uns4.includes(r[COL.UN]));
+    const mks4 = getSel(selMk).filter(v => v !== ALL_OPT);
+    if(mks4.length) r4rows = r4rows.filter(r => mks4.includes(r[COL.MARCA]));
+    r4rows = r4rows.filter(r => rbs.some(rb => num(r[rb+6]) > 0)); // MDO > 0
+    r4totMdo = r4rows.reduce((s,r) => s + sumMdo(r), 0);
+    const byM4 = {};
+    r4rows.forEach(r => { const m=r[COL.MARCA]; if(!byM4[m]) byM4[m]=[]; byM4[m].push(r); });
+    ms = Object.entries(byM4).map(([marca, brows]) => {
+      const bmi = brows.reduce((s,r) => s + sumMdo(r), 0);
+      const pi  = r4totMdo > 0 ? bmi / r4totMdo * 100 : 0;
+      if(pi < 3) return null;
+      let chains = 0;
+      if(brows.some(r => rbs.some(rb => num(r[rb+3]) > 0))) chains++;
+      for(const cc of COMP_COLS){ if(brows.some(r => num(r[cc.col]) > 0)) chains++; }
+      if(chains !== 1) return null;
+      const bcu = brows.reduce((s,r) => s + sumCRF(r), 0);
+      return { m:marca, brows, c:bcu>0?1:0, r1:0, r2:0, r3:0, r4:1, fcVals:[], miss:[], pi };
+    }).filter(Boolean).sort((a,b) => b.pi - a.pi);
+  } else {
+    if(rfMode === 'r1')      ms = ms.filter(x => x.r1);
+    else if(rfMode === 'r2') ms = ms.filter(x => x.r2);
+    else if(rfMode === 'r3') ms = ms.filter(x => x.r3);
+  }
+  return { ms, sumMdo, r4totMdo };
 }
 
 // ── Exportar recomendaciones a Excel ──────────────────────────
 function exportRec(){
   if(rfMode === 'none'){
-    if(window.Swal) Swal.fire({ icon:'info', title:'Seleccioná un filtro', text:'Elegí R1, R2 o R3 antes de exportar.' });
+    if(window.Swal) Swal.fire({ icon:'info', title:'Seleccioná un filtro', text:'Elegí R1, R2, R3 o R4 antes de exportar.' });
     else alert('Seleccioná un filtro de recomendaciones antes de exportar.');
     return;
   }
   const rows = getRows();
   const rbs  = getRBs();
-  const { ms, sumMdo } = getRecBrands(rows, rbs);
+  const { ms, sumMdo, r4totMdo } = getRecBrands(rows, rbs);
   if(!ms.length){
     if(window.Swal) Swal.fire({ icon:'warning', title:'Sin datos', text:'No hay recomendaciones con el filtro actual.' });
     else alert('Sin recomendaciones con el filtro actual.');
     return;
   }
 
-  const recLabel = { r1:'Rec. Marca no CRF', r2:'Rec. Marca sí CRF', r3:'Rec. EAN faltante' };
+  const recLabel = { r1:'Rec. Marca no CRF', r2:'Rec. Marca sí CRF', r3:'Rec. EAN faltante', r4:'Rec. 1 Sola Cadena' };
   const regionStr = getSel(selReg).join(' / ');
 
-  const totMdoAll = rows.reduce((s,r) => s + sumMdo(r), 0);
+  const totMdoAll = rfMode === 'r4' && r4totMdo
+    ? r4totMdo
+    : rows.reduce((s,r) => s + sumMdo(r), 0);
 
   // ── Hoja 1: Resumen por marca-segmento ──
   const summaryRows = [['Región','Marca','% MDO Total','Segmento','% MDO Segmento','Presencia CRF','Tipo Rec.','Detalle']];
   RANGOS.forEach(seg => {
-    const segMdo = rows.filter(r => r[COL.RANGO] === seg).reduce((s,r) => s + sumMdo(r), 0);
+    const segMdo = rfMode === 'r4'
+      ? ms.reduce((s,b) => s + b.brows.filter(r => r[COL.RANGO] === seg).reduce((ss,r) => ss + sumMdo(r), 0), 0)
+      : rows.filter(r => r[COL.RANGO] === seg).reduce((s,r) => s + sumMdo(r), 0);
     ms.forEach(brand => {
       const segBrows = brand.brows.filter(r => r[COL.RANGO] === seg);
       if(!segBrows.length) return;
@@ -866,6 +931,11 @@ function exportRec(){
       let detalle = '';
       if(brand.r2) detalle = 'FC: ' + brand.fcVals.filter(v => v==='2'||v==='3').join('/');
       if(brand.r3) detalle = brand.miss.slice(0,5).map(r => r[COL.DESCRIPCION] || String(r[COL.EAN]||'')).join(' / ');
+      if(brand.r4){
+        let chain = brand.c ? 'CRF' : '';
+        if(!chain){ for(const cc of COMP_COLS){ if(brand.brows.some(r => num(r[cc.col]) > 0)){ chain = cc.name; break; } } }
+        detalle = 'Solo en: ' + chain;
+      }
       summaryRows.push([
         regionStr, brand.m, parseFloat(brand.pi.toFixed(2)), seg, pi_seg,
         brand.c ? 'Sí' : 'No', recLabel[rfMode] || rfMode, detalle,
@@ -927,12 +997,16 @@ function renderRec(){
 
   const rows = getRows();
   const rbs  = getRBs();
-  const { ms, sumMdo } = getRecBrands(rows, rbs);
+  const { ms, sumMdo, r4totMdo } = getRecBrands(rows, rbs);
 
   if(!ms.length){
     body.innerHTML = '<div class="no-data">Sin recomendaciones con el filtro actual.</div>';
     return;
   }
+
+  // Para R4, el denominador del segmento se calcula sobre las filas propias de cada marca
+  // (ya integradas en brand.brows desde r4rows, no desde rows del mercado ≥2 cadenas).
+  const useR4denom = rfMode === 'r4';
 
   // ── Grid de 4 columnas por segmento (al estilo "script andre") ──
   const SEG_BG  = { 'BAJO':'#93c5fd', 'MEDIO':'#3b82f6', 'ALTO':'#1e40af', 'ALTA GAMA':'#6d28d9' };
@@ -940,9 +1014,10 @@ function renderRec(){
   const esc     = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
   const html = '<div class="brands-grid">' + RANGOS.map(seg => {
-    // MDO total del segmento (sobre las filas ya filtradas)
-    const segRows = rows.filter(r => r[COL.RANGO] === seg);
-    const segMdo  = segRows.reduce((s,r) => s + sumMdo(r), 0);
+    // MDO total del segmento: para R4 se calcula desde las brows propias; si no, desde rows filtradas
+    const segMdo = useR4denom
+      ? ms.reduce((s, b) => s + b.brows.filter(r => r[COL.RANGO] === seg).reduce((ss,r) => ss + sumMdo(r), 0), 0)
+      : rows.filter(r => r[COL.RANGO] === seg).reduce((s,r) => s + sumMdo(r), 0);
 
     // Marcas de la lista actual que tienen MDO en este segmento
     const segBrands = ms.map(brand => {
@@ -973,6 +1048,7 @@ function renderRec(){
           recBadge = `<span class="seg-brand-badge sbadge-r2">⚠ FC${fc}</span>`;
         }
         else if(b.r3) recBadge = `<span class="seg-brand-badge sbadge-r3">◐ ${b.miss.length}EAN</span>`;
+        else if(b.r4) recBadge = '<span class="seg-brand-badge sbadge-r4">◉ 1 cadena</span>';
         return `<div class="seg-brand-row">
           <span class="seg-brand-name" title="${esc(b.m)}">${esc(b.m)}</span>
           <span class="seg-brand-pct">${b.pi_seg.toFixed(1)}%</span>
