@@ -684,6 +684,9 @@ function totVal(d, mktT, mktM){
   return 0;
 }
 
+// Formatea enteros con punto como separador de miles (13717 → "13.717")
+const fmtN = n => new Intl.NumberFormat('es-AR').format(Math.round(n));
+
 // ── Render ─────────────────────────────────────────────────────
 function render(){
   if(!ALLDATA.length) return;
@@ -788,7 +791,7 @@ function render(){
     const dispVals = labels.map((n, i) => {
       const sv = yVals[i];
       if(sv <= 0) return '';
-      return viewMode==='refs' ? Math.round(sv).toString() : sv.toFixed(1) + '%';
+      return viewMode==='refs' ? fmtN(sv) : sv.toFixed(1) + '%';
     });
     return {
       name: seg, type:'bar', x:labels,
@@ -822,7 +825,7 @@ function render(){
     return {
       x:n, y:barTop, xref:'x', yref:'y',
       showarrow:false, yanchor:'bottom', yshift: showBarText ? 10 : 4,
-      text: viewMode==='cob' ? v.toFixed(1)+'%' : Math.round(v).toString(),
+      text: viewMode==='cob' ? v.toFixed(1)+'%' : fmtN(v),
       font:{ size:13, color:'#1e293b', family:'Segoe UI' },
     };
   }).filter(Boolean);
