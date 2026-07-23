@@ -926,14 +926,10 @@ function calcBrands(plans, uns, marcas, regiones, groupBy, seccion) {
   let items = Object.entries(groupMap).map(([key, b]) => ({ marca: key, ...b }));
 
   if (!usePreCalc) {
-    // Denominador: para MARCA con nUns>1 → planograma completo; resto → base filtrada
-    let denomBase = base;
-    if (groupBy === 'MARCA' && nUns > 1 && nPlans > 0) {
-      denomBase = allData.filter(r => plans.includes(r.PLANOGRAMA));
-      if (marcas && marcas.length) denomBase = denomBase.filter(r => marcas.includes(r.MARCA));
-    }
+    // Denominador: siempre la base ya filtrada (sec + plans + uns + marcas)
+    // El 100% se calcula sobre el subconjunto seleccionado, no sobre el PG completo
     let denCrfImp = 0, denCrfUni = 0, denMdoImp = 0, denMdoUni = 0;
-    for (const row of denomBase) {
+    for (const row of base) {
       for (const reg of regiones) {
         denCrfImp += row[reg + '|CRF_IMP'] || 0;
         denCrfUni += row[reg + '|CRF_UNI'] || 0;
