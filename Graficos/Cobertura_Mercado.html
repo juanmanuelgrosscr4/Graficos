@@ -301,6 +301,10 @@ select[multiple] { resize: none; height: 62px; }
 <!-- Filter bar -->
 <div class="filters-bar">
   <div class="filter-group">
+    <span class="filter-label">Competidores</span>
+    <select id="selComp" multiple></select>
+  </div>
+  <div class="filter-group">
     <span class="filter-label">Región</span>
     <select id="selReg" multiple size="4"></select>
   </div>
@@ -315,10 +319,6 @@ select[multiple] { resize: none; height: 62px; }
   <div class="filter-group">
     <span class="filter-label">Marca</span>
     <select id="selMk" multiple></select>
-  </div>
-  <div class="filter-group">
-    <span class="filter-label">Competidores</span>
-    <select id="selComp" multiple></select>
   </div>
 </div>
 
@@ -604,6 +604,64 @@ function getAvailableBrands(rows){
   }).sort();
 }
 
+function rebuildRegion(rows){
+  // En modo "todos los competidores", mostrar siempre las 7 regiones
+  const selCompVals = getSel(selComp).filter(v => v !== ALL_OPT);
+  const isAllComps  = getSel(selComp).includes(ALL_OPT) || selCompVals.length === 0;
+
+  const visibleRegs = isAllComps
+    ? REGIONS
+    : REGIONS.filter(reg => {
+        if(reg === 'TOTAL NACIONAL') return true; // siempre disponible
+        const rb = RB[reg];
+        return rows.some(r => num(r[rb+3]) > 0);
+      });
+
+  const prevRegs = getSel(selReg);
+  const stillOk  = prevRegs.filter(r => visibleRegs.includes(r));
+  const reset    = stillOk.length === 0;
+
+  selReg.innerHTML = visibleRegs.map(r => {
+    const sel = reset ? r === 'TOTAL NACIONAL' : stillOk.includes(r);
+    return `<option value="${r}"${sel ? ' selected' : ''}>${r}</option>`;
+  }).join('');
+
+  if(!getSel(selReg).length){
+    const tn = selReg.querySelector('option[value="TOTAL NACIONAL"]');
+    if(tn) tn.selected = true;
+  }
+  prevRegSel = getSel(selReg);
+}
+
+function rebuildPlanograma(rows){
+  const prevPgs = getSel(selPg);
+  const wasAll  = prevPgs.includes('__TOT__') || !prevPgs.length;
+  const pls     = [...new Set(rows.map(r => r[COL.PLANOGRAMA]))].sort();
+  const stillOk = wasAll ? [] : pls.filter(p => prevPgs.includes(p));
+  const reset   = wasAll || stillOk.length === 0;
+
+  selPg.innerHTML = `<option value="__TOT__"${reset ? ' selected' : ''}>— TOTAL SURTIDO —</option>`
+    + pls.map(p => {
+        const s = reset || stillOk.includes(p);
+        return `<option value="${p}"${s ? ' selected' : ''}>${p}</option>`;
+      }).join('');
+}
+
+function rebuildUN(rows){
+  const prevUns = getSel(selUN);
+  const wasAll  = prevUns.includes(ALL_OPT);
+  const uns     = [...new Set(rows.map(r => r[COL.UN]))].sort();
+  const stillOk = wasAll ? [] : uns.filter(u => prevUns.includes(u));
+  const reset   = wasAll || stillOk.length === 0;
+
+  selUN.innerHTML = `<option value="${ALL_OPT}"${reset ? ' selected' : ''}>— Todas —</option>`
+    + uns.map(u => {
+        const s = reset || stillOk.includes(u);
+        return `<option value="${u}"${s ? ' selected' : ''}>${u}</option>`;
+      }).join('');
+  _prev.set(selUN, reset ? [ALL_OPT] : stillOk);
+}
+
 function rebuildMarca(rows){
   const newMks  = getAvailableBrands(rows);
   const wasAll  = getSel(selMk).includes(ALL_OPT);
@@ -624,13 +682,10 @@ function onPgChange(){
   const pgs  = getSel(selPg);
   const isT  = pgs.includes('__TOT__') || !pgs.length;
   const rows = isT ? base : base.filter(r => pgs.includes(r[COL.PLANOGRAMA]));
-  // UN — se resetea completo al cambiar PG
-  const uns = [...new Set(rows.map(r => r[COL.UN]))].sort();
-  selUN.innerHTML = `<option value="${ALL_OPT}" selected>— Todas —</option>`
-    + uns.map(u => `<option value="${u}">${u}</option>`).join('');
-  setAllOpt(selUN);
-  // Marca — rows sin filtro de UN (recién reseteada) pero con filtro de Competidores
-  // Forzar reset a Todas (PG cambió, selección anterior ya no aplica)
+  // UN: reset completo al cambiar PG
+  _prev.set(selUN, [ALL_OPT]);
+  rebuildUN(rows);
+  // Marca: reset completo al cambiar PG
   _prev.set(selMk, [ALL_OPT]);
   rebuildMarca(rows);
   render();
@@ -644,7 +699,29 @@ function onUnChange(){
 
 function onCompChange(){
   applyExclusive(selComp);
-  rebuildMarca(getPgUnRows());
+
+  // Base filtrada por Sección y por los competidores seleccionados (intersección)
+  const selCompVals = getSel(selComp).filter(v => v !== ALL_OPT);
+  const isAllComps  = getSel(selComp).includes(ALL_OPT) || selCompVals.length === 0;
+  let compBase = getSecBase();
+  if(!isAllComps){
+    const activeComps = COMP_COLS.filter(c => selCompVals.includes(c.name));
+    compBase = compBase.filter(r => activeComps.every(c => num(r[c.col]) > 0));
+  }
+
+  // Cascade: Región → Planograma → UN → Marca
+  rebuildRegion(compBase);
+  rebuildPlanograma(compBase);
+
+  const pgs = getSel(selPg);
+  const isT = pgs.includes('__TOT__') || !pgs.length;
+  const pgRows = isT ? compBase : compBase.filter(r => pgs.includes(r[COL.PLANOGRAMA]));
+  rebuildUN(pgRows);
+
+  const uns = getSel(selUN).filter(v => v !== ALL_OPT);
+  const pgUnRows = uns.length ? pgRows.filter(r => uns.includes(r[COL.UN])) : pgRows;
+  rebuildMarca(pgUnRows);
+
   render();
 }
 
