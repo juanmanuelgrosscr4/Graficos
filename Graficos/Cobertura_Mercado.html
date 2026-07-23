@@ -460,9 +460,9 @@ selReg.addEventListener('change', () => {
 });
 
 // Listeners con exclusividad para UN, Marca, Competidores
-selUN  .addEventListener('change', () => { applyExclusive(selUN);   render(); });
+selUN  .addEventListener('change', onUnChange);
 selMk  .addEventListener('change', () => { applyExclusive(selMk);   render(); });
-selComp.addEventListener('change', () => { applyExclusive(selComp); render(); });
+selComp.addEventListener('change', onCompChange);
 selPg  .addEventListener('change', onPgChange);
 
 // ── View mode ──────────────────────────────────────────────────
@@ -568,21 +568,83 @@ function onSecChange(){
   onPgChange();
 }
 
+// ── Helper: marcas disponibles según PG + UN + Competidores ───
+function getPgUnRows(){
+  const base = getSecBase ? getSecBase() : ALLDATA;
+  const pgs  = getSel(selPg);
+  const isT  = pgs.includes('__TOT__') || !pgs.length;
+  let rows   = isT ? base : base.filter(r => pgs.includes(r[COL.PLANOGRAMA]));
+  const uns  = getSel(selUN).filter(v => v !== ALL_OPT);
+  if(uns.length) rows = rows.filter(r => uns.includes(r[COL.UN]));
+  return rows;
+}
+
+function getAvailableBrands(rows){
+  if(!COMP_COLS.length) return [...new Set(rows.map(r => r[COL.MARCA]))].sort();
+  const rbs         = getRBs();
+  const selCompVals = getSel(selComp).filter(v => v !== ALL_OPT);
+  const isAllComps  = getSel(selComp).includes(ALL_OPT) || selCompVals.length === 0;
+  const activeComps = isAllComps ? COMP_COLS : COMP_COLS.filter(c => selCompVals.includes(c.name));
+
+  const byM = {};
+  rows.forEach(r => { const m = r[COL.MARCA]; if(!byM[m]) byM[m]=[]; byM[m].push(r); });
+
+  return Object.keys(byM).filter(marca => {
+    const brows = byM[marca];
+    // Condición permanente: la marca debe tener al menos un competidor (cualquiera)
+    if(!brows.some(r => COMP_COLS.some(c => num(r[c.col]) > 0))) return false;
+    // Si hay competidores específicos seleccionados:
+    // la marca debe estar en CRF Y en TODOS los competidores seleccionados (intersección)
+    if(!isAllComps){
+      const hasCRF = brows.some(r => rbs.some(rb => num(r[rb+3]) > 0));
+      if(!hasCRF) return false;
+      return activeComps.every(comp => brows.some(r => num(r[comp.col]) > 0));
+    }
+    return true;
+  }).sort();
+}
+
+function rebuildMarca(rows){
+  const newMks  = getAvailableBrands(rows);
+  const wasAll  = getSel(selMk).includes(ALL_OPT);
+  const prevSet = new Set(getSel(selMk).filter(v => v !== ALL_OPT));
+  const stillOk = wasAll ? [] : newMks.filter(m => prevSet.has(m));
+  const reset   = wasAll || stillOk.length === 0;
+
+  selMk.innerHTML = `<option value="${ALL_OPT}"${reset ? ' selected' : ''}>— Todas —</option>`
+    + newMks.map(m => {
+        const s = reset || stillOk.includes(m);
+        return `<option value="${m}"${s ? ' selected' : ''}>${m}</option>`;
+      }).join('');
+  _prev.set(selMk, reset ? [ALL_OPT] : stillOk);
+}
+
 function onPgChange(){
   const base = getSecBase();
-  const pgs = getSel(selPg);
-  const isT = pgs.includes('__TOT__') || !pgs.length;
-  let rows = isT ? base : base.filter(r => pgs.includes(r[COL.PLANOGRAMA]));
-  // UN
+  const pgs  = getSel(selPg);
+  const isT  = pgs.includes('__TOT__') || !pgs.length;
+  const rows = isT ? base : base.filter(r => pgs.includes(r[COL.PLANOGRAMA]));
+  // UN — se resetea completo al cambiar PG
   const uns = [...new Set(rows.map(r => r[COL.UN]))].sort();
   selUN.innerHTML = `<option value="${ALL_OPT}" selected>— Todas —</option>`
     + uns.map(u => `<option value="${u}">${u}</option>`).join('');
   setAllOpt(selUN);
-  // Marca
-  const mks = [...new Set(rows.map(r => r[COL.MARCA]))].sort();
-  selMk.innerHTML = `<option value="${ALL_OPT}" selected>— Todas —</option>`
-    + mks.map(m => `<option value="${m}">${m}</option>`).join('');
-  setAllOpt(selMk);
+  // Marca — rows sin filtro de UN (recién reseteada) pero con filtro de Competidores
+  // Forzar reset a Todas (PG cambió, selección anterior ya no aplica)
+  _prev.set(selMk, [ALL_OPT]);
+  rebuildMarca(rows);
+  render();
+}
+
+function onUnChange(){
+  applyExclusive(selUN);
+  rebuildMarca(getPgUnRows());
+  render();
+}
+
+function onCompChange(){
+  applyExclusive(selComp);
+  rebuildMarca(getPgUnRows());
   render();
 }
 
@@ -723,18 +785,15 @@ function render(){
   const activeNames = COMP_COLS.map(c => c.name).filter(n => allCompData[n]);
 
   // Actualizar selector de competidores: solo mostrar los activos
-  // Preservar el estado de selección del usuario
-  const prevDesel = new Set(
-    [...selComp.options]
-      .filter(o => o.value !== ALL_OPT && !o.selected)
-      .map(o => o.value)
-  );
-  const wasAllMode = getSel(selComp).includes(ALL_OPT) ||
-                     getSel(selComp).filter(v => v !== ALL_OPT).length === 0;
+  // Rastrear qué estaba SELECCIONADO (no deseleccionado) para que competidores
+  // que aparecen nuevos no se auto-seleccionen en modo específico
+  const prevSel    = new Set(getSel(selComp).filter(v => v !== ALL_OPT));
+  const wasAllMode = getSel(selComp).includes(ALL_OPT) || prevSel.size === 0;
 
   selComp.innerHTML = `<option value="${ALL_OPT}"${wasAllMode ? ' selected' : ''}>— Todos —</option>`
     + activeNames.map(name => {
-        const sel = wasAllMode || !prevDesel.has(name);
+        // Modo "todos": seleccionar todo. Modo específico: solo los previamente seleccionados
+        const sel = wasAllMode || prevSel.has(name);
         return `<option value="${name}"${sel ? ' selected' : ''}>${name}</option>`;
       }).join('');
   // Actualizar prev state del selector
