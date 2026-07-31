@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pirámide de Segmentación</title>
+<link rel="icon" href="../favicon.ico" type="image/x-icon">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f1f5f9;color:#1e293b;font-size:13px}
+header{background:#1d4ed8;color:#fff;padding:12px 20px;display:flex;align-items:center;gap:16px}
+.title-block{display:flex;flex-direction:column;flex:1}
+header h1{font-size:17px;font-weight:700}
+header span{font-size:12px;opacity:.75;display:block;margin-top:2px}
+.filters{background:#fff;border-bottom:1px solid #e2e8f0;padding:10px 20px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
+.filters label{font-size:12px;color:#475569;font-weight:600}
+.filters select{padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;background:#fff;cursor:pointer;max-width:280px}
+.filter-group{display:flex;flex-direction:column;gap:3px;flex:1;min-width:150px}
+.filter-label{font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px}
+.filter-group select{width:100%;max-width:none}
+.filter-group select[multiple]{resize:none}
+.metric-row{background:#fff;border-bottom:1px solid #e2e8f0;padding:8px 20px;display:flex;align-items:center;gap:12px}
+.sep{width:1px;height:24px;background:#e2e8f0}
+.radio-group{display:flex;gap:0;border:1px solid #cbd5e1;border-radius:6px;overflow:hidden}
+.radio-group label{padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer;color:#475569;background:#fff;border-right:1px solid #cbd5e1;user-select:none}
+.radio-group label:last-child{border-right:none}
+.radio-group label.active{background:#1d4ed8;color:#fff}
+.metric-row select{padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;background:#fff;cursor:pointer;max-width:220px;width:100%}
+.main{padding:16px 20px;display:flex;flex-direction:column;gap:16px}
+.pyr-section{background:#fff;border-radius:10px;padding:16px 20px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.pyr-header{display:grid;grid-template-columns:100px 1fr 100px 80px 100px 1fr 100px;margin-bottom:8px;align-items:end}
+.ph-sublbl{font-size:10px;font-weight:700;padding-bottom:2px}
+.ph-mdo{color:#64748b;text-align:right;padding-right:8px}
+.ph-crf{color:#1d4ed8;text-align:left;padding-left:8px}
+.ph-title{text-align:center;font-size:13px;font-weight:700}
+.ph-region{color:#1d4ed8}
+.ph-tn{color:#64748b}
+.ph-pvp{text-align:center;font-size:10px;font-weight:700;color:#1d4ed8;letter-spacing:.5px;padding-bottom:2px}
+.pyr-rows{display:flex;flex-direction:column;gap:4px}
+.pyr-row{display:grid;grid-template-columns:100px 1fr 100px 80px 100px 1fr 100px;align-items:center}
+.lbl{display:flex;flex-direction:column;justify-content:center;gap:1px}
+.lbl-mdo{align-items:flex-end;text-align:right;padding-right:8px}
+.lbl-crf{align-items:flex-start;text-align:left;padding-left:8px}
+.lbl-pct{font-size:12px;font-weight:700}
+.lbl-mdo .lbl-pct{color:#374151}
+.lbl-crf .lbl-pct{color:#1d4ed8}
+.lbl-val{font-size:10px;color:#94a3b8}
+.row-svg{display:flex;justify-content:center}
+.row-pvp{display:flex;justify-content:center;align-items:center}
+.pvp-badge{padding:6px 0;border-radius:5px;color:#fff;font-size:10px;font-weight:700;text-align:center;width:76px}
+
+/* Brand panel */
+.brand-panel{display:flex;gap:8px;background:#fff;border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.seg-col{flex:1;min-width:0;display:flex;flex-direction:column}
+.seg-header{padding:8px 10px;border-radius:6px 6px 0 0;color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:space-between}
+.seg-stats{font-weight:400;font-size:11px;opacity:.9}
+.seg-body{border:1px solid #e2e8f0;border-top:none;border-radius:0 0 6px 6px;overflow-y:auto;max-height:400px}
+.brand-item{padding:8px 10px;border-bottom:1px solid #f1f5f9}
+.brand-item.rec-bg{background:#fefce8}
+.brand-item.rec-bg-2{background:#fff4e6}
+.brand-item.rec-bg-3{background:#f5f3ff}
+.brand-item.one-reg{background:#fff7ed}
+.brand-item.rec-bg.one-reg{background:#fef3c7}
+.missing-eans{font-size:10px;color:#5b21b6;margin-top:3px}
+.brand-top{display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:3px}
+.brand-name{font-weight:600;font-size:12px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.brand-pct{font-size:12px;font-weight:700;color:#1d4ed8;white-space:nowrap}
+.brand-badges{display:flex;gap:3px;flex-wrap:wrap;margin-bottom:3px}
+.badge{padding:1px 5px;border-radius:3px;font-size:10px;font-weight:600}
+.badge-crf{background:#dcfce7;color:#15803d}
+.badge-ncrf{background:#fee2e2;color:#b91c1c}
+.badge-rec{background:#fef9c3;color:#a16207}
+.badge-rec2{background:#ffedd5;color:#c2410c}
+.badge-rec3{background:#ede9fe;color:#5b21b6}
+.badge-1reg{background:#fed7aa;color:#c2410c}
+.badge-multi{background:#e0e7ff;color:#3730a3}
+.brand-detail{font-size:11px;color:#64748b;margin-top:1px}
+.brand-eans{font-size:10px;color:#94a3b8;margin-top:1px}
+.filter-bar{display:flex;gap:4px;padding:6px 10px;background:#f8fafc;border-bottom:1px solid #e2e8f0;flex-wrap:wrap}
+.filt-btn{padding:2px 8px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;font-size:11px;cursor:pointer;color:#475569}
+.filt-btn.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
+.filt-btn-rec1.active{background:#a16207;border-color:#a16207}
+.filt-btn-rec2.active{background:#c2410c;border-color:#c2410c}
+.filt-btn-rec3.active{background:#5b21b6;border-color:#5b21b6}
+.no-data{padding:20px;text-align:center;color:#94a3b8;font-size:12px}
+
+.rec-toolbar{display:flex;align-items:center;justify-content:space-between;padding:2px 4px;gap:12px}
+.rec-toolbar-title{font-size:12px;font-weight:700;color:#475569}
+.export-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap;transition:background .15s}
+.export-btn:hover{background:#15803d}
+.export-btn:disabled{background:#94a3b8;cursor:not-allowed;opacity:.75}
+.export-btn:disabled:hover{background:#94a3b8}
+
+.upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: rgba(255,255,255,.15);
+  color: #fff !important;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s;
+  border: 1px solid rgba(255,255,255,.4);
+}
+.upload-btn:hover { background: rgba(255,255,255,.28); }
+.menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: rgba(255,255,255,.15);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background .15s;
+  border: 1px solid rgba(255,255,255,.4);
+}
+.menu-btn:hover { background: rgba(255,255,255,.28); }
+.file-status { font-size: 11px; color: rgba(255,255,255,.75); white-space: nowrap; }
+.file-status.loaded { color: #fff; font-weight: 600; }
+.processing-overlay {
+  position: fixed; inset: 0; background: rgba(15,23,42,.7);
+  display: none; align-items: center; justify-content: center;
+  flex-direction: column; gap: 14px; z-index: 9999;
+}
+.processing-overlay.show { display: flex; }
+.processing-spinner {
+  width: 48px; height: 48px; border: 5px solid rgba(255,255,255,.3);
+  border-top-color: #fff; border-radius: 50%;
+  animation: processing-spin .8s linear infinite;
+}
+.processing-overlay span {
+  color: #fff; font-size: 14px; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif;
+}
+@keyframes processing-spin { to { transform: rotate(360deg); } }
+/* ── KPI bar ── */
+#kpiBar{background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:4px 20px;display:flex;gap:20px;align-items:center;flex-shrink:0;font-size:11px;}
+.kpi-item{display:flex;flex-direction:column;gap:0;}
+.kpi-lbl{font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;}
+.kpi-val{font-size:13px;font-weight:700;color:#1e293b;}
+/* ── Active filter dot ── */
+.filter-label.has-filter::after{content:'●';color:#1d4ed8;font-size:7px;margin-left:3px;vertical-align:top;}
+/* ── Drag overlay ── */
+#dragOverlay{display:none;position:fixed;inset:0;z-index:9998;background:rgba(29,78,216,.12);border:4px dashed #1d4ed8;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#1d4ed8;pointer-events:none;}
+#dragOverlay.show{display:flex;}
+/* ── IDB restore banner ── */
+#idbBanner{display:none;background:#dbeafe;border-bottom:1px solid #93c5fd;padding:4px 20px;font-size:11px;color:#1e40af;align-items:center;gap:10px;flex-shrink:0;}
+#idbBanner.show{display:flex;}
+.idb-btn{font-size:10px;font-weight:700;padding:2px 8px;border:1px solid #1d4ed8;border-radius:4px;background:#1d4ed8;color:#fff;cursor:pointer;}
+.idb-dismiss{background:transparent;color:#1e40af;border-color:#93c5fd;}
+/* ── Misc ── */
+.vbtn.pin-on{background:#f59e0b!important;color:#fff!important;border-color:#d97706!important;}
+.comp-btns{display:flex;gap:3px;margin-top:3px;}
+.comp-mbtn{font-size:9px;font-weight:700;padding:1px 6px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;color:#475569;cursor:pointer;}
+.comp-mbtn:hover{background:#1d4ed8;color:#fff;border-color:#1d4ed8;}
+
+</style>
+</head>
+<body>
+<div class="processing-overlay" id="processingOverlay">
+  <div class="processing-spinner"></div>
+  <span>Aguarde un momento mientras se procesa el archivo</span>
+</div>
+<div id="dragOverlay">📂 Soltá el archivo Excel aquí</div>
+<div id="idbBanner"><span>Último archivo: <b id="idbFileName"></b></span><button class="idb-btn" id="idbRestoreBtn">Restaurar</button><button class="idb-btn idb-dismiss" id="idbDismissBtn">✕</button></div>
+<header>
+  <div class="title-block">
+    <h1 id="mainTitle">🔺 Pirámide de Segmentación — Carrefour</h1>
+    <span id="subTitle">· Análisis por Región / Planograma / UN / Marca</span>
+  </div>
+  <a href="../Menu.html" class="menu-btn">&#127968; Menú principal</a>
+  <div style="flex:1;display:flex;justify-content:flex-end;align-items:center;gap:12px">
+    <label class="upload-btn">
+      <input type="file" id="fileInput" accept=".xlsx" style="display:none">
+      &#128194; Cargar Excel
+    </label>
+    <span class="file-status" id="fileStatus">Sin archivo cargado</span>
+  </div>
+</header>
+<div class="filters">
+  <div class="filter-group">
+    <span class="filter-label">Región</span>
+    <select id="sel-region" size="4" onchange="render()"></select>
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">Planograma</span>
+    <select id="sel-plano" multiple size="4"></select>
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">Unidad de Necesidad</span>
+    <select id="sel-un" multiple size="4"></select>
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">Proveedor</span>
+    <select id="sel-fab" multiple size="4"></select>
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">Marca</span>
+    <select id="sel-marca" multiple size="4"></select>
+  </div>
+</div>
+<div class="metric-row">
+  <div style="display:flex;flex-direction:column;gap:2px;margin-right:8px">
+    <span style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase">Umbral R3</span>
+    <select onchange="r3Threshold=+this.value;recalcAndRender()" style="font-size:11px;padding:2px 4px;border:1px solid #e2e8f0;border-radius:4px"><option value="0.7">70%</option><option value="0.75">75%</option><option value="0.8" selected>80%</option><option value="0.85">85%</option><option value="0.9">90%</option></select>
+  </div>
+  <div class="radio-group" id="metric-btns">
+    <label class="active" onclick="setMetric('imp',this)">Facturación $</label>
+    <label onclick="setMetric('uni',this)">Unidades</label>
+    <label onclick="setMetric('ean',this)">EANs</label>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:3px">
+    <span class="filter-label">Sección</span>
+    <select id="sel-seccion" onchange="onSeccionChange()" style="min-width:130px"></select>
+  </div>
+</div>
+<div class="main">
+  <div class="pyr-section">
+    <div class="pyr-header" id="pyr-header"></div>
+    <div class="pyr-rows" id="pyr-rows"></div>
+  </div>
+  <div class="rec-toolbar">
+    <span class="rec-toolbar-title">★ Recomendaciones por Segmento · <span style="color:#a16207">★ Sin CRF</span> · <span style="color:#c2410c">⚠ Status FC</span> · <span style="color:#5b21b6">◐ EANs parciales</span></span>
+    <button class="export-btn" id="btnExportRec" onclick="exportRecomendaciones()" disabled>&#11015; Exportar Recomendaciones</button>
+    <button class="export-btn" id="btnExportPyr" onclick="exportPiramide()" disabled style="background:#1d4ed8">&#11015; Exportar Pirámide</button>
+  </div>
+  <div class="brand-panel" id="brand-panel"></div>
+</div>
+<script>
+// ============================================================
+// Layout de columnas de la hoja "Export" (índices 0-based de XLSX.utils.sheet_to_json).
+// Si en el futuro se agrega/quita una columna en el Excel, ajustar ÚNICAMENTE estos
+// valores (COL y REGION_BASE_START) en vez de buscar números sueltos en todo el script.
+// ============================================================
+const COL = {
+  EAN:         0,  // columna A
+  SECCION:     1,  // columna B
+  PLANOGRAMA:  2,
+  UN:          3,
+  DESCRIPCION: 4,
+  STATUS_FC:   5,  // columna F (nueva): 0, 1, 2, 3 ó "-" si no hay dato
+  FABRICANTE:  6,  // columna G (era F)
+  MARCA:       7,  // columna H (era G)
+  CATEGORIA:   8,  // columna I (era H) — "Categoría Scentia"
+  RANGO:       22, // columna W (era V) — segmentación por planograma
+  RANGO_UN:    23, // columna X (era W) — segmentación por UN
+};
+
+// ============================================================
+// Validación de encabezados — lista de los 119 nombres de columna de la hoja "Export"
+// (fila índice 2 = 3ra fila de encabezado), capturada de la última versión conocida del
+// archivo. Si el Excel cargado no coincide exactamente (columna agregada/movida/renombrada),
+// se rechaza la carga en vez de leer datos de la posición equivocada silenciosamente.
+// Si el layout vuelve a cambiar legítimamente, regenerar este array desde el archivo nuevo
+// (y aplicar el mismo cambio en Participacion_Barras.html, que comparte esta misma hoja).
+// ============================================================
+const REGION_BLOCK_HEADERS = ['CRF $','%PG $','%UN $','CRF uni','%PG uni','%UN uni','MDO $','%PG $','%UN $','MDO uni','%PG uni','%UN uni'];
+const EXPECTED_HEADERS = [
+  'EAN','SECCIÓN','PLANOGRAMA','UN','DESCRIPCIÓN','STATUS_FC','FABRICANTE','MARCA','CATEGORÍA',
+  'CRF UNIDADES','CRF IMPORTE NETO','MDO UNIDADES','MDO IMPORTE NETO','MDO UNIDADES','MDO NETO',
+  'PLANO-MARCA','UN-MARCA','PRECIO','PRECIO PLANO','PRECIO UN','PRECIO PROMEDIO PLANO MARCA','PRECIO PROMEDIO UN MARCA',
+  'RANGO PLANOGRAMA','RANGO UN',
+]
+  .concat(REGION_BLOCK_HEADERS) // TOTAL NACIONAL
+  .concat(REGION_BLOCK_HEADERS) // NOA
+  .concat(REGION_BLOCK_HEADERS) // LITORAL
+  .concat(REGION_BLOCK_HEADERS) // CUYO
+  .concat(REGION_BLOCK_HEADERS) // CORDOBA
+  .concat(REGION_BLOCK_HEADERS) // BS AS
+  .concat(REGION_BLOCK_HEADERS) // PATAGONIA
+  .concat([
+    'YTD Share $ 2025','YTD Share $ 2026','YTD Dif Sh $',
+    'YTD Share VOL 2025','YTD Share VOL 2026','YTD Dif Sh VOL',
+    'YTD % Prog RM $','YTD % Prog CRF $','YTD GAP CRF vs RM $',
+    'YTD % Prog RM VOL','YTD % Prog CRF VOL','YTD GAP CRF vs RM VOL',
+  ]);
+
+// Compara la fila de encabezados real (allRows[2]) contra EXPECTED_HEADERS, columna por
+// columna (recortando espacios). Devuelve un array de strings describiendo cada diferencia;
+// vacío si coincide. Usar contra los datos crudos de sheet_to_json({header:1}).
+// Solo valida las columnas del bloque fijo (hasta 'YTD GAP CRF vs RM VOL').
+// Las columnas de competidores que siguen (distintas entre Retail y Maxi) se ignoran.
+// Normaliza tildes → CATEGORÍA ≡ CATEGORIA, SECCIÓN ≡ SECCION, etc.
+function validarColumnas(allRows){
+  const headerRow = allRows[2] || [];
+  const errores = [];
+  const norm = s => String(s==null?'':s).trim().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  for(let i=0;i<EXPECTED_HEADERS.length;i++){
+    const real = norm(headerRow[i]);
+    const esp  = norm(EXPECTED_HEADERS[i]);
+    if(real!==esp){
+      errores.push(`Columna ${i+1}: se esperaba "${EXPECTED_HEADERS[i]}" y se encontró "${String(headerRow[i]==null?'':headerRow[i]).trim()||'(vacío)'}"`);
+    }
+  }
+  return errores;
+}
+
+let META=null;
+const RANGOS=['BAJO','MEDIO','ALTO','ALTA GAMA'];
+const RCOLS={'ALTA GAMA':'#6d28d9','ALTO':'#1d4ed8','MEDIO':'#2563eb','BAJO':'#60a5fa'};
+const RLGT={'ALTA GAMA':'#ede9fe','ALTO':'#dbeafe','MEDIO':'#bfdbfe','BAJO':'#eff6ff'};
+const SHAPE={
+  'BAJO':      {topF:0.80,botF:1.00},
+  'MEDIO':     {topF:0.58,botF:0.80},
+  'ALTO':      {topF:0.34,botF:0.58},
+  'ALTA GAMA': {topF:0.12,botF:0.34},
+};
+const ROW_H=86;
+
+let metric='imp';
+let r3Threshold = 0.8; // porcentaje del top-MDO para clasificar Tipo 3
+function setMetric(m,el){
+  metric=m;
+  document.querySelectorAll('#metric-btns label').forEach(l=>l.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+function recalcAndRender(){ recalcCurrentNode(); render(); }
+
+// Separador de miles con puntos (Argentina)
+const fmtN = v => Math.round(v).toLocaleString('es-AR');
+const fmt$  = v => v>0 ? '$'+fmtN(v) : '—';
+const fmtP  = v => (+(v||0)).toFixed(1)+'%';
+
+const selRegion=document.getElementById('sel-region');
+const selSeccion=document.getElementById('sel-seccion');
+const selPlano=document.getElementById('sel-plano');
+const selUN=document.getElementById('sel-un');
+const selMarca=document.getElementById('sel-marca');
+const selFabPir=document.getElementById('sel-fab');
+let RAWROWS={};   // filas crudas por planograma, dentro de la Sección seleccionada
+let ALLROWS=[];   // todas las filas del Excel (sin filtrar por Sección)
+let currentNodeMap=null; // {rango:{region:nodo}} para la combinación Sección+Plano(s)+UN(s) actual
+let prevPlanoSel=[]; // último estado de selección de Planograma (para exclusividad con TOTAL SURTIDO)
+
+function getSelectedValues(sel){ return [...sel.selectedOptions].map(o=>o.value); }
+
+// Si se tilda TOTAL SURTIDO junto con planogramas específicos, prevalece la última
+// acción del usuario: tildar TOTAL destilda el resto, y tildar un planograma específico
+// destilda TOTAL (son mutuamente excluyentes).
+function enforceTotalExclusive(){
+  const opts=[...selPlano.options];
+  const cur=opts.filter(o=>o.selected).map(o=>o.value);
+  const totalNow=cur.includes('__TOTAL__');
+  const totalBefore=prevPlanoSel.includes('__TOTAL__');
+  if(cur.length>1){
+    if(totalNow && !totalBefore){
+      opts.forEach(o=>{ if(o.value!=='__TOTAL__') o.selected=false; });
+    } else if(totalNow){
+      opts.forEach(o=>{ if(o.value==='__TOTAL__') o.selected=false; });
+    }
+  }
+  prevPlanoSel=opts.filter(o=>o.selected).map(o=>o.value);
+}
+selPlano.addEventListener('change', function(){
+  enforceTotalExclusive();
+  onPlanoChange();
+});
+const mainTitleEl=document.getElementById('mainTitle');
+const subTitleEl=document.getElementById('subTitle');
+const BASE_TITLE=mainTitleEl.textContent;
+const BASE_SUBTITLE=subTitleEl.textContent;
+
+function populateSelectors(){
+  selRegion.innerHTML='';
+  META.regions.forEach(r=>{const o=document.createElement('option');o.value=r;o.textContent=r;selRegion.appendChild(o);});
+  selSeccion.innerHTML='';
+  const oA=document.createElement('option');oA.value='';oA.textContent='— Todas —';selSeccion.appendChild(oA);
+  META.secciones.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;selSeccion.appendChild(o);});
+}
+
+// Filas vigentes según la Sección elegida (todas las filas si no hay Sección seleccionada)
+function getSeccionRows(){
+  const sec=selSeccion.value;
+  return sec ? ALLROWS.filter(r=>r[COL.SECCION]===sec) : ALLROWS;
+}
+
+// Al cambiar la Sección se reconstruye RAWROWS y la lista de Planogramas disponibles,
+// y se reinicia la selección a TOTAL SURTIDO (dispara el resto de la cadena de filtros).
+function onSeccionChange(){
+  if(!META) return;
+  const rows=getSeccionRows();
+  const byPlano=new Map();
+  rows.forEach(r=>{ const pl=r[COL.PLANOGRAMA]; if(!byPlano.has(pl)) byPlano.set(pl,[]); byPlano.get(pl).push(r); });
+  RAWROWS=Object.fromEntries(byPlano);
+  const planos=[...byPlano.keys()].sort();
+
+  selPlano.innerHTML='';
+  const oT=document.createElement('option');oT.value='__TOTAL__';oT.textContent='— TOTAL SURTIDO —';selPlano.appendChild(oT);
+  planos.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;selPlano.appendChild(o);});
+  oT.selected=true;
+  prevPlanoSel=['__TOTAL__'];
+
+  onPlanoChange();
+}
+
+function onPlanoChange(){
+  if(!META) return;
+  const selPlanos=getSelectedValues(selPlano);
+  const isTotal=selPlanos.includes('__TOTAL__');
+  selUN.innerHTML='';
+  // Total surtido: mostrar todas las UNs de la sección. Planograma específico: solo sus UNs.
+  const unRows = isTotal ? getSeccionRows() : selPlanos.reduce((a,pl)=>a.concat(RAWROWS[pl]||[]),[]);
+  if(isTotal || selPlanos.length){
+    const unSet=new Set();
+    unRows.forEach(r=>unSet.add(r[COL.UN]));
+    [...unSet].sort().forEach(u=>{const o=document.createElement('option');o.value=u;o.textContent=u;selUN.appendChild(o);});
+  }
+  selUN.disabled = !isTotal && !selPlanos.length;
+  populateMarcaOptions();
+  recalcCurrentNode();
+  render();
+}
+
+function onUNChange(){
+  populateMarcaOptions();
+  recalcCurrentNode();
+  render();
+}
+
+selUN.addEventListener('change', onUNChange);
+selMarca.addEventListener('change', buildBrandPanel);
+if(selFabPir) selFabPir.addEventListener('change', ()=>{ populateMarcaOptions(); recalcCurrentNode(); render(); });
+
+// Lista de marcas disponibles según Sección + Planograma(s) + UN(s) seleccionadas (para el filtro Marca)
+function populateMarcaOptions(){
+  selMarca.innerHTML='';
+  if(!META) return;
+  const selPlanos=getSelectedValues(selPlano);
+  const isTotal=selPlanos.includes('__TOTAL__');
+  let rows;
+  if(isTotal || !selPlanos.length){ rows=getSeccionRows(); }
+  else{
+    const combined=selPlanos.reduce((a,pl)=>a.concat(RAWROWS[pl]||[]),[]);
+    const selUNs=getSelectedValues(selUN);
+    rows=selUNs.length?combined.filter(r=>selUNs.includes(r[COL.UN])):combined;
+  }
+  // Fabricante options
+  if(selFabPir){
+    const prevFabs=[...selFabPir.selectedOptions].map(o=>o.value);
+    selFabPir.innerHTML='';
+    const fabs=[...new Set(rows.map(r=>String(r[COL.FABRICANTE]||'').trim()).filter(Boolean))].sort();
+    fabs.forEach(f=>{const o=document.createElement('option');o.value=f;o.textContent=f;if(prevFabs.includes(f))o.selected=true;selFabPir.appendChild(o);});
+    selFabPir.size=Math.max(1,Math.min(4,fabs.length));
+  }
+  // Rows filtered by Fabricante for Marca population
+  const selFabVals=selFabPir?[...selFabPir.selectedOptions].map(o=>o.value):[];
+  const rowsForMarca=selFabVals.length?rows.filter(r=>selFabVals.includes(String(r[COL.FABRICANTE]||'').trim())):rows;
+  const marcas=[...new Set(rowsForMarca.map(r=>r[COL.MARCA]))].sort();
+  marcas.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;selMarca.appendChild(o);});
+}
+
+// Recalcula el mapa {rango:{region:nodo}} vigente según Sección + Planograma(s) + UN(s) seleccionadas.
+// Siempre se recombinan dinámicamente las filas filtradas (mismo patrón ya usado para UN),
+// agrupando por RANGO a nivel planograma (col 21) si no hay UN elegidas, o por RANGO_UN (col 22)
+// si hay una o más UN seleccionadas.
+function recalcCurrentNode(){
+  if(!META){ currentNodeMap=null; return; }
+  const selPlanos=getSelectedValues(selPlano);
+  if(!selPlanos.length){ currentNodeMap=null; return; }
+  const isTotal=selPlanos.includes('__TOTAL__');
+  const baseRows = isTotal ? getSeccionRows() : selPlanos.reduce((a,pl)=>a.concat(RAWROWS[pl]||[]),[]);
+  const selUNs = isTotal ? [] : getSelectedValues(selUN);
+  const selFabV = selFabPir ? [...selFabPir.selectedOptions].map(o=>o.value) : [];
+  let filtered = selUNs.length ? baseRows.filter(r=>selUNs.includes(r[COL.UN])) : baseRows;
+  if(selFabV.length) filtered = filtered.filter(r=>selFabV.includes(String(r[COL.FABRICANTE]||'')));
+  const rangoCol = selUNs.length ? COL.RANGO_UN : COL.RANGO;
+  const out={};
+  RANGOS.forEach(rango=>{
+    const segRows=filtered.filter(r=>r[rangoCol]===rango);
+    if(segRows.length) out[rango]=buildSegRegionMap(segRows);
+  });
+  currentNodeMap=out;
+}
+
+function getSeg(rango,region){
+  if(!currentNodeMap) return null;
+  try{ return currentNodeMap[rango][region]||null; }
+  catch(e){ return null; }
+}
+
+function getVals(d){
+  if(!d) return {mdo:0,crf:0,mdoPrice:0,crfPrice:0};
+  if(metric==='imp') return {mdo:d.di||0,crf:d.ci||0,mdoPrice:d.pm||0,crfPrice:d.pc||0};
+  if(metric==='uni') return {mdo:d.du||0,crf:d.cu||0,mdoPrice:d.pm||0,crfPrice:d.pc||0};
+  return {mdo:d.em||0,crf:d.ec||0,mdoPrice:0,crfPrice:0};
+}
+
+function getDistrib(rango,region){
+  let sC=0,sM=0,tC=0,tM=0;
+  RANGOS.forEach(r=>{
+    const d=getSeg(r,region);if(!d)return;
+    const v=getVals(d);tC+=v.crf;tM+=v.mdo;
+    if(r===rango){sC=v.crf;sM=v.mdo;}
+  });
+  return{crf:tC>0?sC/tC*100:0,mdo:tM>0?sM/tM*100:0};
+}
+
+function rowSVG(rango,region,W){
+  const d=getSeg(rango,region);
+  const sh=SHAPE[rango];
+  const H=ROW_H,cx=W/2;
+  const wTop=W*sh.topF,wBot=W*sh.botF;
+  const x0=cx-wTop/2,x1=cx+wTop/2;
+  const nx0=cx-wBot/2,nx1=cx+wBot/2;
+  const col=RCOLS[rango],colL=RLGT[rango];
+  let s=`<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg" style="display:block">`;
+  if(!d){
+    s+=`<polygon points="${x0},0 ${x1},0 ${nx1},${H} ${nx0},${H}" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1.5"/>`;
+    s+=`<text x="${cx}" y="${H/2+4}" text-anchor="middle" font-size="10" fill="#94a3b8">Sin datos</text>`;
+    return s+'</svg>';
+  }
+  // Fixed divider at center
+  s+=`<polygon points="${x0},0 ${cx},0 ${cx},${H} ${nx0},${H}" fill="${colL}"/>`;
+  s+=`<polygon points="${cx},0 ${x1},0 ${nx1},${H} ${cx},${H}" fill="${col}"/>`;
+  s+=`<polygon points="${x0},0 ${x1},0 ${nx1},${H} ${nx0},${H}" fill="none" stroke="#fff" stroke-width="3"/>`;
+  s+=`<line x1="${cx}" y1="0" x2="${cx}" y2="${H}" stroke="#fff" stroke-width="2" stroke-dasharray="5,3"/>`;
+  const altoSh=SHAPE['ALTO'];
+  const altoMinW=Math.min(W*altoSh.topF,W*altoSh.botF);
+  const cardW=altoMinW*0.85,cardH=54,cardX=cx-cardW/2,cardY=H/2-cardH/2;
+  s+=`<rect x="${cardX}" y="${cardY}" width="${cardW}" height="${cardH}" rx="4" fill="rgba(255,255,255,.92)" stroke="#cbd5e1" stroke-width="1"/>`;
+  const totalEt=RANGOS.reduce((a,r)=>{const dd=getSeg(r,region);return a+(dd?dd.et:0);},0);
+  const pctEan=totalEt>0?fmtP(d.et/totalEt*100):'';
+  s+=`<text x="${cx}" y="${cardY+16}" text-anchor="middle" font-size="12" font-weight="700" fill="#1e293b">${fmtN(d.et)} EANs</text>`;
+  s+=`<text x="${cx}" y="${cardY+30}" text-anchor="middle" font-size="11" fill="#475569">${pctEan}</text>`;
+  s+=`<text x="${cx}" y="${cardY+44}" text-anchor="middle" font-size="10" fill="#2563eb">MDO: ${fmtN(d.em)} | CRF: ${fmtN(d.ec)}</text>`;
+  return s+'</svg>';
+}
+
+function lblCell(rango,region,side,minH){
+  const d=getSeg(rango,region);
+  const dist=getDistrib(rango,region);
+  const v=getVals(d);
+  const pct=side==='mdo'?fmtP(dist.mdo):fmtP(dist.crf);
+  let sub='';
+  if(metric==='imp') sub=side==='mdo'?fmt$(v.mdoPrice):fmt$(v.crfPrice);
+  else if(metric==='uni') sub=side==='mdo'?fmtN(v.mdo)+' u':fmtN(v.crf)+' u';
+  const cls=side==='mdo'?'lbl lbl-mdo':'lbl lbl-crf';
+  return `<div class="${cls}" style="min-height:${minH}px">
+    <span class="lbl-pct">${pct}</span>
+    ${sub?`<span class="lbl-val">${sub}</span>`:''}
+  </div>`;
+}
+
+function render(){
+  if(!META) return;
+  const region=selRegion.value;
+  const isTot=getSelectedValues(selPlano).includes('__TOTAL__');
+  const regionLabel=isTot?region+' · Total Surtido':region;
+  const lbl={imp:'$ seg.',uni:'uni seg.',ean:'EANs seg.'};
+
+  document.getElementById('pyr-header').innerHTML=`
+    <div class="ph-sublbl ph-mdo">MDO ${lbl[metric]}</div>
+    <div class="ph-title ph-region">${regionLabel}</div>
+    <div class="ph-sublbl ph-crf">CRF ${lbl[metric]}</div>
+    <div class="ph-pvp">RANGO</div>
+    <div class="ph-sublbl ph-mdo">MDO ${lbl[metric]}</div>
+    <div class="ph-title ph-tn">Total Nacional</div>
+    <div class="ph-sublbl ph-crf">CRF ${lbl[metric]}</div>`;
+
+  const rowsEl=document.getElementById('pyr-rows');
+  const totalW=rowsEl.offsetWidth||1100;
+  const svgW=Math.max(Math.floor((totalW-480)/2),140);
+
+  let html='';
+  [...RANGOS].reverse().forEach(rango=>{
+    html+=`<div class="pyr-row">
+      ${lblCell(rango,region,'mdo',ROW_H)}
+      <div class="row-svg">${rowSVG(rango,region,svgW)}</div>
+      ${lblCell(rango,region,'crf',ROW_H)}
+      <div class="row-pvp"><span class="pvp-badge" style="background:${RCOLS[rango]}">${rango}</span></div>
+      ${lblCell(rango,'TOTAL NACIONAL','mdo',ROW_H)}
+      <div class="row-svg">${rowSVG(rango,'TOTAL NACIONAL',svgW)}</div>
+      ${lblCell(rango,'TOTAL NACIONAL','crf',ROW_H)}
+    </div>`;
+  });
+  rowsEl.innerHTML=html;
+  buildBrandPanel();
+}
+
+const AF={};RANGOS.forEach(r=>AF[r]='all');
+function setFilter(r,f){AF[r]=f;buildBrandPanel();}
+
+function buildBrandPanel(){
+  const region=selRegion.value;
+  const selMarcas=getSelectedValues(selMarca);
+  let html='';
+  ['BAJO','MEDIO','ALTO','ALTA GAMA'].forEach(rango=>{
+    const d=getSeg(rango,region),col=RCOLS[rango],af=AF[rango]||'all';
+    html+=`<div class="seg-col">
+    <div class="seg-header" style="background:${col}">
+      <span>${rango}</span>
+      <span class="seg-stats">${d?fmtN(d.nm)+' marcas · '+fmtN(d.et)+' EANs':'Sin datos'}</span>
+    </div>
+    <div class="filter-bar">
+      <button class="filt-btn ${af==='all'?'active':''}"    onclick="setFilter('${rango}','all')">Todas</button>
+      <button class="filt-btn ${af==='1reg'?'active':''}"   onclick="setFilter('${rango}','1reg')">1 región</button>
+      <button class="filt-btn ${af==='multi'?'active':''}"  onclick="setFilter('${rango}','multi')">Multireg</button>
+      <button class="filt-btn ${af==='nocrf'?'active':''}"  onclick="setFilter('${rango}','nocrf')">✕ No CRF</button>
+      <button class="filt-btn filt-btn-rec1 ${af==='rec1'?'active':''}" onclick="setFilter('${rango}','rec1')">Rec. Marca no CRF</button>
+      <button class="filt-btn filt-btn-rec2 ${af==='rec2'?'active':''}" onclick="setFilter('${rango}','rec2')">Rec. Marca si CRF</button>
+      <button class="filt-btn filt-btn-rec3 ${af==='rec3'?'active':''}" onclick="setFilter('${rango}','rec3')">Rec. EAN no CRF</button>
+    </div>
+    <div class="seg-body">`;
+    if(!d||!d.marcas||!d.marcas.length){html+='<div class="no-data">Sin marcas con este filtro</div>';}
+    else{
+      let ms=selMarcas.length?d.marcas.filter(x=>selMarcas.includes(x.m)):d.marcas;
+      if(af==='1reg')       ms=ms.filter(x=>(x.mr===1||x.cr===1));
+      else if(af==='multi') ms=ms.filter(x=>x.mr>=2||x.cr>=2);
+      else if(af==='nocrf') ms=ms.filter(x=>x.c===0);
+      else if(af==='rec1')  ms=ms.filter(x=>x.r1);
+      else if(af==='rec2')  ms=ms.filter(x=>x.r2);
+      else if(af==='rec3')  ms=ms.filter(x=>x.r3);
+      if(!ms.length) html+='<div class="no-data">Sin marcas con este filtro</div>';
+      else ms.forEach(mk=>{
+        const pct=metric==='uni'?mk.pu:mk.pi;
+        const isOneReg=(mk.mr===1||mk.cr===1);
+        const badges=[];
+        if(mk.c) badges.push('<span class="badge badge-crf">✓ CRF</span>');
+        else     badges.push('<span class="badge badge-ncrf">✕ CRF</span>');
+        if(mk.r1) badges.push('<span class="badge badge-rec">★ Sin CRF</span>');
+        if(mk.r2){
+          const fcVals=mk.statusFcVals.filter(v=>v==='2'||v==='3').join('/');
+          badges.push('<span class="badge badge-rec2">⚠ Status FC '+fcVals+'</span>');
+        }
+        if(mk.r3) badges.push('<span class="badge badge-rec3">◐ '+mk.missingEans.length+' EAN'+(mk.missingEans.length>1?'s':'')+' faltante'+(mk.missingEans.length>1?'s':'')+'</span>');
+        if(isOneReg) badges.push('<span class="badge badge-1reg">1 región</span>');
+        else if(mk.mr>=2||mk.cr>=2) badges.push('<span class="badge badge-multi">Multireg</span>');
+        const regInfo=`MDO: ${mk.mr} reg · CRF: ${mk.cr} reg`;
+        const recBgClass=mk.r1?'rec-bg':mk.r2?'rec-bg-2':mk.r3?'rec-bg-3':'';
+        let missingEanHtml='';
+        if(mk.r3&&mk.missingEans.length){
+          const names=mk.missingEans.slice(0,3).map(r=>r[COL.DESCRIPCION]||String(r[COL.EAN]||'?')).join(' · ');
+          const more=mk.missingEans.length>3?' · <em>+'+(mk.missingEans.length-3)+' más</em>':'';
+          missingEanHtml=`<div class="missing-eans">◐ Top-80% no surtidos: ${names}${more}</div>`;
+        }
+        html+=`<div class="brand-item ${recBgClass} ${isOneReg?'one-reg':''}">
+          <div class="brand-top">
+            <span class="brand-name" title="${mk.m}">${mk.m}</span>
+            <span class="brand-pct">${fmtP(pct)} seg.</span>
+          </div>
+          <div class="brand-badges">${badges.join('')}</div>
+          <div class="brand-detail">MDO: ${fmt$(mk.ppm)} | CRF: ${fmt$(mk.ppc)}</div>
+          <div class="brand-eans">EANs: ${fmtN(mk.et)} · CRF: ${fmtN(mk.ec)} · MDO: ${fmtN(mk.em)} · ${regInfo}</div>
+          ${missingEanHtml}
+        </div>`;
+      });
+    }
+    html+='</div></div>';
+  });
+  document.getElementById('brand-panel').innerHTML=html;
+  updateExportButtonState();
+  updateExportPyrBtn();
+}
+
+// Participación de una marca dentro de TODO el planograma (los 4 rangos sumados), para una
+// región dada — a diferencia de mk.pi/mk.pu (participación sólo dentro de SU rango). Usa el
+// mismo criterio de métrica (Importe/Unidades) que el resto del dashboard. Devuelve una
+// fracción 0..1 (no un % 0..100). Sólo se usa en el export de recomendaciones.
+function getPlanogramaShare(marcaName, region){
+  let brandAgg=0, totalAgg=0;
+  RANGOS.forEach(rango=>{
+    const d=getSeg(rango,region);
+    if(!d) return;
+    totalAgg += metric==='uni' ? (d.cu+d.du) : (d.ci+d.di);
+    const mk=(d.marcas||[]).find(x=>x.m===marcaName);
+    if(mk) brandAgg += metric==='uni' ? (mk.bcu+mk.bdu) : (mk.bci+mk.bdi);
+  });
+  return totalAgg>0 ? brandAgg/totalAgg : 0;
+}
+
+// Habilita el botón "Exportar a Excel" sólo si hay al menos una marca recomendada (★ Rec) en
+// algún segmento, para la Región y el filtro de Marca actualmente seleccionados — mismo
+// criterio que usa exportRecomendaciones() para decidir qué incluir en el archivo.
+function hasAnyRecommendation(){
+  if(!currentNodeMap) return false;
+  const region=selRegion.value;
+  const selMarcas=getSelectedValues(selMarca);
+  return RANGOS.some(rango=>{
+    const d=getSeg(rango,region);
+    if(!d||!d.marcas) return false;
+    const ms=selMarcas.length?d.marcas.filter(x=>selMarcas.includes(x.m)):d.marcas;
+    return ms.some(x=>x.r1||x.r2||x.r3);
+  });
+}
+function updateExportButtonState(){
+  const btn=document.getElementById('btnExportRec');
+  if(btn) btn.disabled=!hasAnyRecommendation();
+}
+
+// Exporta a Excel las marcas recomendadas (★ Rec: sin Carrefour y con participación >=3%)
+// de los 4 segmentos, para la Región y el filtro de Marca actualmente seleccionados.
+// Una fila por EAN (no por marca): Descripción/Sección/Planograma/UN/Categoría Scentia son
+// atributos propios de ese EAN; "Participación en el Segmento", "Participación en el
+// Planograma" y "Precio Promedio MDO" son valores a nivel marca (se repiten en cada EAN de esa
+// marca). Hay dos cruces EAN×región, 0% si no participa: las 7 columnas REGIONS_ALL son la
+// participación del EAN dentro de SU SEGMENTO (rango) en esa región (CRF$+MDO$ del EAN /
+// CRF$+MDO$ del segmento completo en esa región); las 7 columnas "Planograma - <región>" son
+// la participación de la MARCA (no del EAN puntual) dentro de TODO el planograma (los 4 rangos
+// sumados) en esa región — ver getPlanogramaShare(). Todas las columnas van centradas salvo los
+// valores de Descripción, alineados a la izquierda (requiere xlsx-js-style, el fork de SheetJS
+// cargado en <head> que sí escribe estilos de celda en el .xlsx generado).
+function updateExportPyrBtn(){ const b=document.getElementById('btnExportPyr'); if(b) b.disabled=!currentNodeMap; }
+function exportPiramide(){
+  if(!currentNodeMap){ alert('Cargá un Excel primero.'); return; }
+  const region=selRegion.value||'TOTAL NACIONAL';
+  const rows=[['Región','Segmento','CRF $','CRF Uni','MDO $','MDO Uni','% CRF $','% MDO $','% CRF Uni','% MDO Uni','Precio CRF','Precio MDO','EANs total','EANs CRF','EANs MDO','Marcas','Con CRF','Sin CRF','Con Rec']];
+  function addRegion(reg){
+    RANGOS.forEach(rango=>{
+      const d=getSeg(rango,reg); if(!d) return;
+      rows.push([reg,rango,d.ci,d.cu,d.di,d.du,d.pci/100,d.pmi/100,d.pcu/100,d.pmu/100,d.pc,d.pm,d.et,d.ec,d.em,d.nm,d.ncrf,d.nnc,d.nrec||0]);
+    });
+  }
+  addRegion(region);
+  if(region!=='TOTAL NACIONAL') addRegion('TOTAL NACIONAL');
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  const pctCols=[6,7,8,9];
+  const range=XLSX.utils.decode_range(ws['!ref']||'A1');
+  for(let R=1;R<=range.e.r;R++){pctCols.forEach(C=>{const addr=XLSX.utils.encode_cell({r:R,c:C});const cell=ws[addr];if(cell){cell.t='n';cell.z='0.00%';}});}
+  ws['!cols']=[12,10,10,10,10,10,8,8,8,8,10,10,8,8,8,8,8,8,8].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb,ws,'Pirámide');
+  XLSX.writeFile(wb,'Piramide_'+region.replace(/\s+/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.xlsx');
+}
+function exportRecomendaciones(){
+  if(!META || !currentNodeMap){ alert('Cargá un Excel primero.'); return; }
+  const region=selRegion.value;
+  const selMarcas=getSelectedValues(selMarca);
+  const out=[];
+  RANGOS.forEach(rango=>{
+    const d=getSeg(rango,region);
+    if(!d||!d.marcas) return;
+    // Totales de segmento (CRF$+MDO$) por región (TOTAL NACIONAL + las 6 sub-regiones),
+    // denominador de la participación de cada EAN.
+    const regionTotals={};
+    REGIONS_ALL.forEach(sr=>{
+      const dr=getSeg(rango,sr);
+      regionTotals[sr]=dr?(dr.ci+dr.di):0;
+    });
+    let ms=selMarcas.length?d.marcas.filter(x=>selMarcas.includes(x.m)):d.marcas;
+    ms=ms.filter(x=>x.r1||x.r2||x.r3);
+    ms.forEach(mk=>{
+      const pct=metric==='uni'?mk.pu:mk.pi;
+      const planogramaPct=getPlanogramaShare(mk.m, region);
+      const planogramaByRegion={};
+      REGIONS_ALL.forEach(sr=>{ planogramaByRegion[sr]=getPlanogramaShare(mk.m, sr); });
+
+      // Armar las filas a exportar según el tipo de recomendación
+      const rowsWithTipo=[];
+      if(mk.r1){
+        (mk.brows||[]).forEach(row=>rowsWithTipo.push({row, tipo:'Tipo 1 - Sin CRF'}));
+      }
+      if(mk.r2){
+        (mk.brows||[])
+          .filter(r=>{ const s=String(r[COL.STATUS_FC]||'').trim(); return s==='2'||s==='3'; })
+          .forEach(row=>rowsWithTipo.push({row, tipo:'Tipo 2 - Status FC '+String(row[COL.STATUS_FC]||'').trim()}));
+      }
+      if(mk.r3){
+        (mk.missingEans||[]).forEach(row=>rowsWithTipo.push({row, tipo:'Tipo 3 - EAN top-80% sin surtido'}));
+      }
+
+      rowsWithTipo.forEach(({row, tipo})=>{
+        const eanRaw=row[COL.EAN];
+        const record={
+          EAN: (eanRaw===''||eanRaw==null)?'':num(eanRaw),
+          'Descripción': row[COL.DESCRIPCION]||'',
+          'Sección': row[COL.SECCION]||'',
+          'Planograma': row[COL.PLANOGRAMA]||'',
+          'UN': row[COL.UN]||'',
+          'Categoría Scentia': row[COL.CATEGORIA]||'',
+          Marca: mk.m,
+          'Status FC': String(row[COL.STATUS_FC]||'').trim(),
+          'Tipo Recomendación': tipo,
+          'Precio Promedio MDO': mk.ppm,
+          Segmento: rango,
+          'Participación en el Segmento': pct/100,
+          'Part. en el Planograma': planogramaPct,
+        };
+        REGIONS_ALL.forEach(sr=>{
+          const b=REGION_BASE[sr];
+          const eanImp=num(row[b])+num(row[b+6]);
+          const tot=regionTotals[sr];
+          record[sr]=tot>0?eanImp/tot:0;
+        });
+        REGIONS_ALL.forEach(sr=>{ record['Planograma - '+sr]=planogramaByRegion[sr]; });
+        out.push(record);
+      });
+    });
+  });
+  if(!out.length){ alert('No hay marcas recomendadas para exportar con los filtros actuales.'); return; }
+
+  // Col 0:EAN 1:Desc 2:Secc 3:Plano 4:UN 5:Cat 6:Marca 7:StatusFC 8:TipoRec 9:Precio 10:Segmento 11:Part.Seg 12+:REGIONES 19:Part.Plano 20+:Plano-REGIONES
+  const headers=['EAN','Descripción','Sección','Planograma','UN','Categoría Scentia','Marca','Status FC','Tipo Recomendación','Precio Promedio MDO','Segmento',
+                 'Participación en el Segmento']
+                .concat(REGIONS_ALL)
+                .concat(['Part. en el Planograma'])
+                .concat(REGIONS_ALL.map(sr=>'Planograma - '+sr));
+  const ws=XLSX.utils.json_to_sheet(out,{header:headers});
+
+  const C_EAN=0, C_DESC=1, C_PRECIO=9, C_PART=11;
+  const REGION_START=12, C_PART_PLANO=REGION_START+REGIONS_ALL.length;
+  const PLANO_REGION_START=C_PART_PLANO+1;
+  const pctCols=[C_PART, C_PART_PLANO]
+    .concat(REGIONS_ALL.map((_,i)=>REGION_START+i))
+    .concat(REGIONS_ALL.map((_,i)=>PLANO_REGION_START+i));
+
+  // Texto tal como se ve la celda ya formateada (según su numFmt), para poder calcular el
+  // ancho "AutoFit" de cada columna igual que lo haría Excel con Cells.EntireColumn.AutoFit.
+  function celdaComoTexto(cell){
+    if(!cell) return '';
+    if(cell.t==='n'){
+      if(cell.z==='"$"#,##0.00') return '$' + cell.v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+      if(cell.z==='0.00%') return (cell.v*100).toFixed(2)+'%';
+      if(cell.z==='0') return String(Math.round(cell.v));
+      return String(cell.v);
+    }
+    return String(cell.v==null?'':cell.v);
+  }
+
+  // Formato de celdas: EAN entero sin decimales, precio con separador de miles, porcentajes
+  // (Participación + las 7 columnas de región) como % real de Excel, alineación (todo
+  // centrado salvo Descripción, a la izquierda), y estilo del encabezado (fondo celeste,
+  // negrita, fuente tamaño 8).
+  const range=XLSX.utils.decode_range(ws['!ref']);
+  for(let R=range.s.r;R<=range.e.r;R++){
+    for(let C=range.s.c;C<=range.e.c;C++){
+      const cell=ws[XLSX.utils.encode_cell({r:R,c:C})];
+      if(!cell) continue;
+      if(R>0){
+        if(C===C_EAN && cell.t==='n'){ cell.z='0'; }
+        else if(C===C_PRECIO){ cell.t='n'; cell.z='"$"#,##0.00'; }
+        else if(pctCols.includes(C)){ cell.t='n'; cell.z='0.00%'; }
+      }
+      const horizontal=(R>0 && C===C_DESC)?'left':'center';
+      cell.s=Object.assign({},cell.s,{
+        alignment:{horizontal:horizontal,vertical:'center'},
+      },R===0?{fill:{fgColor:{rgb:'B8CCE4'}},font:{bold:true,sz:8}}:{});
+    }
+  }
+
+  // Ancho de columna = longitud del valor más largo de esa columna (encabezado o datos, ya
+  // formateado), equivalente a Cells.Select / Cells.EntireColumn.AutoFit.
+  const colWidths=[];
+  for(let C=range.s.c;C<=range.e.c;C++){
+    let maxLen=0;
+    for(let R=range.s.r;R<=range.e.r;R++){
+      maxLen=Math.max(maxLen, celdaComoTexto(ws[XLSX.utils.encode_cell({r:R,c:C})]).length);
+    }
+    colWidths.push({wch:maxLen+2});
+  }
+  ws['!cols']=colWidths;
+
+  // Autofiltro (desplegables de filtro/orden) sobre todo el rango exportado.
+  ws['!autofilter']={ref:ws['!ref']};
+
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Recomendaciones');
+  const regionSlug=region.replace(/\s+/g,'_');
+  XLSX.writeFile(wb,`Recomendaciones_${regionSlug}.xlsx`);
+}
+
+document.getElementById('pyr-rows').innerHTML =
+  '<div class="no-data" style="padding:48px;text-align:center;width:100%;grid-column:1/-1">'
+  + '\uD83D\uDCC2 Carg\u00e1 un archivo Excel (.xlsx) con la hoja "Export" para visualizar la pir\u00e1mide de segmentaci\u00f3n.</div>';
+
+window.addEventListener('resize',()=>{ if(META) render(); });
+
+// ============================================================
+// Carga y parseo del Excel (reemplaza los datos hardcodeados)
+// ============================================================
+// Cada región ocupa un bloque de 12 columnas consecutivas (r[b], r[b+3], r[b+6], r[b+9]).
+// REGION_BASE_START = columna de 'TOTAL NACIONAL'; el resto se calcula sumando el ancho
+// del bloque (REGION_STEP) — así, si se inserta una columna antes de estos bloques, sólo
+// hay que tocar REGION_BASE_START (o COL, arriba) y no cada número por separado.
+const REGION_BASE_START = 24;
+const REGION_STEP = 12;
+const SUBREGIONS  = ['NOA','LITORAL','CUYO','CORDOBA','BS AS','PATAGONIA'];
+const REGIONS_ALL = ['TOTAL NACIONAL'].concat(SUBREGIONS);
+const REGION_BASE = {};
+REGIONS_ALL.forEach((region,i)=>{ REGION_BASE[region] = REGION_BASE_START + i*REGION_STEP; });
+
+function num(v){ const n=parseFloat(v); return isNaN(n)?0:n; }
+function round2(v){ return Math.round(v*100)/100; }
+
+// Tipo 3: EANs de la marca que representan el top-80% de venta MDO$ en el segmento
+// pero que NO están surtidos en CRF. Solo aplica a marcas que CRF ya trabaja (c===1).
+// Devuelve {missingEans: [...filas]}.
+function computeType3(brandRows, regionBase){
+  const totalMdo=brandRows.reduce((s,r)=>s+num(r[regionBase+6]),0);
+  if(totalMdo<=0) return {missingEans:[]};
+  const sorted=[...brandRows].sort((a,b_)=>num(b_[regionBase+6])-num(a[regionBase+6]));
+  let cumMdo=0;
+  const top80=[];
+  for(const row of sorted){
+    cumMdo+=num(row[regionBase+6]);
+    top80.push(row);
+    if(cumMdo>=totalMdo*r3Threshold) break;
+  }
+  // EANs del top-80% sin ventas en CRF (unidades CRF = r[regionBase+3] = 0)
+  const missingEans=top80.filter(r=>num(r[regionBase+3])<=0);
+  return {missingEans};
+}
+
+// Construye el nodo agregado {et,ec,em,ci,cu,di,du,pci,pmi,pcu,pmu,pc,pm,nm,ncrf,nnc,nrec,marcas}
+// para un conjunto de filas (ya filtradas por planograma+UN+rango) y una región dada.
+function buildNode(rowsArr, region){
+  const b = REGION_BASE[region];
+  const active = rowsArr.filter(r => num(r[b+3])+num(r[b+9]) > 0);
+  const et = active.length;
+  const ec = active.filter(r=>num(r[b+3])>0).length;
+  const em = active.filter(r=>num(r[b+9])>0).length;
+  let ci=0,cu=0,di=0,du=0;
+  active.forEach(r=>{ ci+=num(r[b]); cu+=num(r[b+3]); di+=num(r[b+6]); du+=num(r[b+9]); });
+  const totImp = ci+di, totUni = cu+du;
+  const pci = totImp>0 ? round2(ci/totImp*100) : 0;
+  const pmi = totImp>0 ? round2(di/totImp*100) : 0;
+  const pcu = totUni>0 ? round2(cu/totUni*100) : 0;
+  const pmu = totUni>0 ? round2(du/totUni*100) : 0;
+  const pc  = cu>0 ? round2(ci/cu) : 0;
+  const pm  = du>0 ? round2(di/du) : 0;
+
+  const byMarca = new Map();
+  active.forEach(r=>{
+    const m = r[COL.MARCA];
+    if(!byMarca.has(m)) byMarca.set(m, []);
+    byMarca.get(m).push(r);
+  });
+
+  const marcas = [];
+  byMarca.forEach((brows, mname)=>{
+    let bci=0,bcu=0,bdi=0,bdu=0;
+    brows.forEach(r=>{ bci+=num(r[b]); bcu+=num(r[b+3]); bdi+=num(r[b+6]); bdu+=num(r[b+9]); });
+    const piRaw = totImp>0 ? (bci+bdi)/totImp*100 : 0;
+    const puRaw = totUni>0 ? (bcu+bdu)/totUni*100 : 0;
+    const c  = bcu>0 ? 1 : 0;
+    // Tipo 1: sin presencia CRF y con part. ≥ 3% en el segmento
+    const r1 = (c===0 && piRaw>=3) ? 1 : 0;
+    // Tipo 2: Status_FC 2 ó 3, con CRF$ > 0 y part. ≥ 3% en el segmento
+    const statusFcVals=[...new Set(brows.map(r=>String(r[COL.STATUS_FC]||'').trim()))];
+    const hasStatusFc23=statusFcVals.some(v=>v==='2'||v==='3');
+    const r2=(c===1 && bci>0 && piRaw>=3 && hasStatusFc23) ? 1 : 0;
+    // Tipo 3: marca ya en CRF pero con EANs top-80% MDO$ no surtidos
+    const t3=computeType3(brows, b);
+    const r3=(c===1 && t3.missingEans.length>0) ? 1 : 0;
+    const pp  = (bcu+bdu)>0 ? round2((bci+bdi)/(bcu+bdu)) : 0;
+    const ppc = bcu>0 ? round2(bci/bcu) : 0;
+    const ppm = bdu>0 ? round2(bdi/bdu) : 0;
+    const bet = brows.length;
+    const bec = brows.filter(r=>num(r[b+3])>0).length;
+    const bem = brows.filter(r=>num(r[b+9])>0).length;
+
+    let e2;
+    if(region === 'TOTAL NACIONAL'){
+      e2 = brows.filter(r=>{
+        if(num(r[b+9])<=0) return false;
+        let pres=0;
+        SUBREGIONS.forEach(sr=>{ if(num(r[REGION_BASE[sr]+9])>0) pres++; });
+        return pres>=2;
+      }).length;
+    } else {
+      e2 = bem;
+    }
+
+    // mr/cr: cantidad de regiones (de las 6 sub-regiones) en las que la marca tiene
+    // alguna venta MDO/CRF, calculado sobre TODAS las filas del segmento (no solo las activas
+    // en la región actual) — por eso el valor es constante entre vistas de región.
+    // mrNames: mismo conjunto pero con los nombres (no solo el conteo) — usado en el export
+    // de recomendaciones ("Regiones en las que participa"). brows: filas crudas de esta marca
+    // activas en la región/rango actual — usado en el export para listar EAN por EAN.
+    const allBrandRows = rowsArr.filter(r=>r[COL.MARCA]===mname);
+    const mrNames = SUBREGIONS.filter(sr=>allBrandRows.some(r=>num(r[REGION_BASE[sr]+9])>0));
+    const cr = SUBREGIONS.filter(sr=>allBrandRows.some(r=>num(r[REGION_BASE[sr]+3])>0)).length;
+    const mr = mrNames.length;
+
+    marcas.push({m:mname, pi:round2(piRaw), pu:round2(puRaw), c:c,
+                 r1:r1, r2:r2, r3:r3, statusFcVals:statusFcVals, missingEans:t3.missingEans,
+                 pp:pp, ppc:ppc, ppm:ppm,
+                 et:bet, e2:e2, ec:bec, em:bem, mr:mr, cr:cr, mrNames:mrNames, brows:brows,
+                 bci:bci, bcu:bcu, bdi:bdi, bdu:bdu});
+  });
+  marcas.sort((a,b)=>b.pi-a.pi);
+
+  const nm   = marcas.length;
+  const ncrf = marcas.filter(x=>x.c===1).length;
+  const nnc  = marcas.filter(x=>x.c===0).length;
+  const nrec = marcas.filter(x=>x.r1||x.r2||x.r3).length;
+
+  return {et:et, ec:ec, em:em, ci:Math.round(ci), cu:Math.round(cu), di:Math.round(di), du:Math.round(du),
+          pci:pci, pmi:pmi, pcu:pcu, pmu:pmu, pc:pc, pm:pm,
+          nm:nm, ncrf:ncrf, nnc:nnc, nrec:nrec, marcas:marcas};
+}
+
+function buildSegRegionMap(rowsArr){
+  const out = {};
+  REGIONS_ALL.forEach(region=>{ out[region] = buildNode(rowsArr, region); });
+  return out;
+}
+
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// WORKER: parseo pesado del Excel en un hilo aparte
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// XLSX.read() (parseo binario) y sheet_to_json() de un archivo grande pueden bloquear el
+// hilo principal varios segundos. Mostrar el spinner antes de empezar NO evita el cartel
+// de Chrome "La p\u00e1gina no responde": ese cartel depende de que el hilo principal est\u00e9
+// bloqueado, no de si hubo feedback visual previo. La \u00fanica forma confiable de evitarlo es
+// que el parseo corra en un Web Worker (hilo aparte): el hilo principal queda libre y el
+// navegador nunca lo considera "no responde".
+const PARSE_WORKER_SRC = `
+self.importScripts('https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js');
+
+const COL = {
+  EAN: 0, SECCION: 1, PLANOGRAMA: 2, UN: 3, DESCRIPCION: 4,
+  STATUS_FC: 5, FABRICANTE: 6, MARCA: 7, CATEGORIA: 8,
+  RANGO: 22, RANGO_UN: 23,
+};
+const REGION_BLOCK_HEADERS = ['CRF $','%PG $','%UN $','CRF uni','%PG uni','%UN uni','MDO $','%PG $','%UN $','MDO uni','%PG uni','%UN uni'];
+const EXPECTED_HEADERS = [
+  'EAN','SECCI\u00d3N','PLANOGRAMA','UN','DESCRIPCI\u00d3N','STATUS_FC','FABRICANTE','MARCA','CATEGOR\u00cdA',
+  'CRF UNIDADES','CRF IMPORTE NETO','MDO UNIDADES','MDO IMPORTE NETO','MDO UNIDADES','MDO NETO',
+  'PLANO-MARCA','UN-MARCA','PRECIO','PRECIO PLANO','PRECIO UN','PRECIO PROMEDIO PLANO MARCA','PRECIO PROMEDIO UN MARCA',
+  'RANGO PLANOGRAMA','RANGO UN',
+]
+  .concat(REGION_BLOCK_HEADERS).concat(REGION_BLOCK_HEADERS).concat(REGION_BLOCK_HEADERS)
+  .concat(REGION_BLOCK_HEADERS).concat(REGION_BLOCK_HEADERS).concat(REGION_BLOCK_HEADERS)
+  .concat(REGION_BLOCK_HEADERS)
+  .concat([
+    'YTD Share $ 2025','YTD Share $ 2026','YTD Dif Sh $',
+    'YTD Share VOL 2025','YTD Share VOL 2026','YTD Dif Sh VOL',
+    'YTD % Prog RM $','YTD % Prog CRF $','YTD GAP CRF vs RM $',
+    'YTD % Prog RM VOL','YTD % Prog CRF VOL','YTD GAP CRF vs RM VOL',
+  ]);
+function validarColumnas(allRows){
+  const headerRow = allRows[2] || [];
+  const errores = [];
+  const norm = s => String(s==null?'':s).trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  for(let i=0;i<EXPECTED_HEADERS.length;i++){
+    const real = norm(headerRow[i]);
+    const esp  = norm(EXPECTED_HEADERS[i]);
+    if(real!==esp){
+      errores.push('Columna ' + (i+1) + ': se esperaba "' + EXPECTED_HEADERS[i] + '" y se encontr\u00f3 "' + (String(headerRow[i]==null?'':headerRow[i]).trim()||'(vac\u00edo)') + '"');
+    }
+  }
+  return errores;
+}
+
+self.onmessage = function (e) {
+  try {
+    const wb = XLSX.read(new Uint8Array(e.data), { type: 'array' });
+    const ws = wb.Sheets['Export'];
+    if (!ws) { self.postMessage({ ok: false, fatal: true, message: 'No se encontr\u00f3 la hoja "Export"' }); return; }
+
+    const a1 = ws['A1'] ? String(ws['A1'].v).trim() : '';
+    const b1 = ws['B1'] ? String(ws['B1'].v).trim() : '';
+    const allRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+    const errores = validarColumnas(allRows);
+    if (errores.length) { self.postMessage({ ok: false, fatal: false, errores: errores }); return; }
+
+    const dataRows = allRows.slice(3).filter((r) => r[COL.PLANOGRAMA] && r[COL.UN] && r[COL.MARCA]);
+    if (!dataRows.length) { self.postMessage({ ok: false, fatal: true, message: 'No se encontraron datos en la hoja Export' }); return; }
+
+    dataRows.forEach((r) => {
+      r[COL.SECCION]    = String(r[COL.SECCION]||'').trim();
+      r[COL.PLANOGRAMA] = String(r[COL.PLANOGRAMA]).trim();
+      r[COL.UN]         = String(r[COL.UN]).trim();
+      r[COL.MARCA]      = String(r[COL.MARCA]).trim();
+      r[COL.STATUS_FC]  = String(r[COL.STATUS_FC]||'').trim();
+      r[COL.FABRICANTE] = String(r[COL.FABRICANTE]||'').trim();
+      r[COL.RANGO]      = String(r[COL.RANGO]||'').trim();
+      r[COL.RANGO_UN]   = String(r[COL.RANGO_UN]||'').trim();
+    });
+
+    const secciones = [...new Set(dataRows.map((r) => r[COL.SECCION]).filter(Boolean))].sort();
+
+    self.postMessage({ ok: true, dataRows: dataRows, secciones: secciones, a1: a1, b1: b1 });
+  } catch (err) {
+    self.postMessage({ ok: false, fatal: true, message: err.message });
+  }
+};
+`;
+
+let parseWorker = null;
+function getParseWorker() {
+  if (!parseWorker) {
+    const blob = new Blob([PARSE_WORKER_SRC], { type: 'application/javascript' });
+    parseWorker = new Worker(URL.createObjectURL(blob));
+  }
+  return parseWorker;
+}
+
+function showProcessingOverlay() {
+  const el = document.getElementById('processingOverlay');
+  if (el) el.classList.add('show');
+}
+function hideProcessingOverlay() {
+  const el = document.getElementById('processingOverlay');
+  if (el) el.classList.remove('show');
+}
+
+let pendingFileName = '';
+
+function processArrayBuffer(buffer, _fn) {
+  pendingFileName = _fn || pendingFileName;
+  setStatus('Procesando...', false);
+  showProcessingOverlay();
+  let worker;
+  try { worker = getParseWorker(); } catch (err) {
+    hideProcessingOverlay(); setStatus('\u2717 Error: ' + err.message, false); return;
+  }
+  worker.onmessage = function (ev) {
+    hideProcessingOverlay();
+    const data = ev.data;
+    if (!data.ok) {
+      if (data.fatal) { setStatus('\u2717 Error: ' + (data.message || 'inv\u00e1lido'), false); }
+      else {
+        setStatus('\u2717 El archivo no coincide con el formato esperado', false);
+        console.warn(data.errores.join('\n'));
+        const primeros = data.errores.slice(0, 5);
+        const resto = data.errores.length > 5 ? `\n(y ${data.errores.length - 5} m\u00e1s)` : '';
+        const structHtml = '<details style="margin-top:8px;text-align:left"><summary style="font-size:10px;color:#6b7280;cursor:pointer">Ver columnas esperadas (primeras 24)</summary><div style="font-size:10px;font-family:monospace;max-height:100px;overflow-y:auto">' + ['EAN','SECCI\u00d3N','PLANOGRAMA','UN','DESCRIPCI\u00d3N','STATUS_FC','FABRICANTE','MARCA','CATEGOR\u00cdA','CRF UNIDADES','CRF IMPORTE NETO','MDO UNIDADES','MDO IMPORTE NETO','MDO UNIDADES (2)','MDO NETO (2)','PLANO-MARCA','UN-MARCA','PRECIO','PRECIO PLANO','PRECIO UN','PRECIO PROM PLANO MARCA','PRECIO PROM UN MARCA','RANGO PLANOGRAMA','RANGO UN'].map((h,i)=>`<div>${i+1}: ${h}</div>`).join('') + '</div></details>';
+        if (window.Swal) {
+          Swal.fire({ icon: 'warning', title: 'El archivo seleccionado no es correcto',
+            html: '<div style="text-align:left;font-size:12px;font-family:monospace;max-height:220px;overflow-y:auto">'
+                + primeros.map(e => `<div style="margin:4px 0;padding:4px 6px;background:#fef3c7;border-radius:4px">${e}</div>`).join('')
+                + (resto ? `<div style="margin-top:6px;color:#6b7280">${resto}</div>` : '') + '</div>' + structHtml });
+        } else { alert(primeros.join('\n') + resto); }
+      }
+      return;
+    }
+    mainTitleEl.textContent = data.b1 ? `${BASE_TITLE} ${data.b1}` : BASE_TITLE;
+    subTitleEl.textContent = data.a1 ? `${data.a1} ${BASE_SUBTITLE}` : BASE_SUBTITLE;
+    ALLROWS = data.dataRows;
+    META = { regions: REGIONS_ALL.slice(), secciones: data.secciones };
+    populateSelectors();
+    onSeccionChange();
+    setStatus('\u2713 ' + pendingFileName, true);
+    idbSave({dataRows:data.dataRows,secciones:data.secciones,b1:data.b1,a1:data.a1}, pendingFileName);
+  };
+  worker.onerror = function (err) { hideProcessingOverlay(); setStatus('\u2717 Error: ' + err.message, false); };
+  worker.postMessage(buffer); // no transfer → buffer stays valid for IDB
+}
+document.getElementById('fileInput').addEventListener('change', function () {
+  const file = this.files[0]; if (!file) return;
+  pendingFileName = file.name;
+  const reader = new FileReader();
+  reader.onload = e => processArrayBuffer(e.target.result, file.name);
+  reader.onerror = () => { setStatus('\u2717 Error al leer el archivo', false); hideProcessingOverlay(); };
+  reader.readAsArrayBuffer(file);
+});
+
+// ── IndexedDB persistencia ──────────────────────────────
+const _IDB={n:'carrefour_analytics',s:'files',k:'last',ttl:4*3600*1000};
+function idbOpen(cb){const rq=indexedDB.open(_IDB.n,1);rq.onupgradeneeded=e=>e.target.result.createObjectStore(_IDB.s);rq.onsuccess=e=>cb(e.target.result);rq.onerror=()=>{};}
+function idbSave(data,name){idbOpen(db=>{try{db.transaction(_IDB.s,'readwrite').objectStore(_IDB.s).put({data,name,ts:Date.now()},_IDB.k);}catch(e){}});}
+function idbLoad(cb){idbOpen(db=>{try{const rq=db.transaction(_IDB.s,'readonly').objectStore(_IDB.s).get(_IDB.k);rq.onsuccess=e=>{cb(e.target.result||null);};rq.onerror=()=>cb(null);}catch(e){cb(null);}});}
+function idbTryRestore(){idbLoad(d=>{if(!d)return;const b=document.getElementById('idbBanner');if(!b)return;document.getElementById('idbFileName').textContent=d.name;b.classList.add('show');document.getElementById('idbRestoreBtn').onclick=()=>{b.classList.remove('show');idbRestore(d.data,d.name);};document.getElementById('idbDismissBtn').onclick=()=>b.classList.remove('show');});}
+
+// ── Drag & Drop ─────────────────────────────────────────
+(()=>{const ov=document.getElementById('dragOverlay');let dc=0;
+  document.addEventListener('dragenter',e=>{if([...e.dataTransfer.types].includes('Files')){e.preventDefault();dc++;ov.classList.add('show');}});
+  document.addEventListener('dragover',e=>e.preventDefault());
+  document.addEventListener('dragleave',()=>{if(--dc<=0){dc=0;ov.classList.remove('show');}});
+  document.addEventListener('drop',e=>{e.preventDefault();dc=0;ov.classList.remove('show');const f=e.dataTransfer.files[0];if(!f||!f.name.toLowerCase().endsWith('.xlsx'))return;const rd=new FileReader();rd.onload=ev=>processArrayBuffer(ev.target.result,f.name);rd.readAsArrayBuffer(f);});
+})();
+
+function idbRestore(data, name){
+  if(!data||!data.dataRows) return;
+  ALLROWS = data.dataRows;
+  META = { regions: REGIONS_ALL.slice(), secciones: data.secciones || [] };
+  mainTitleEl.textContent = data.b1 ? `${BASE_TITLE} ${data.b1}` : BASE_TITLE;
+  subTitleEl.textContent = data.a1 ? `${data.a1} ${BASE_SUBTITLE}` : BASE_SUBTITLE;
+  pendingFileName = name;
+  populateSelectors();
+  onSeccionChange();
+  setStatus('\u2713 ' + name, true);
+}
+window.addEventListener('load', idbTryRestore);
+function setStatus(msg, ok) {
+  const st = document.getElementById('fileStatus');
+  st.textContent = msg;
+  st.className = 'file-status' + (ok ? ' loaded' : '');
+}
+</script>
+</body>
+</html>

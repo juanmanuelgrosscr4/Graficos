@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Solicitud Claude Pro — Carrefour Argentina</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', Arial, sans-serif;
+      background: #c8c8c8;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      padding: 32px 16px;
+    }
+
+    /* A4 page */
+    .page {
+      background: #fff;
+      width: 210mm;
+      min-height: 297mm;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── HEADER ── */
+    .header {
+      background: #1a1a1a;
+      padding: 18px 22px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+    .header-left {}
+    .header-title {
+      color: #fff;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+    }
+    .header-sub {
+      color: #aaaaaa;
+      font-size: 13.5px;
+      margin-top: 5px;
+      font-weight: 400;
+      letter-spacing: 0.3px;
+    }
+    .header-date {
+      color: #aaaaaa;
+      font-size: 13.5px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .header-accent {
+      background: #555555;
+      height: 4px;
+    }
+
+    /* ── BODY ── */
+    .body {
+      padding: 20px 22px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* ── SECTION ── */
+    .section {}
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #111111;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+    .section-line {
+      height: 1.5px;
+      background: #333333;
+      margin-bottom: 9px;
+    }
+    .section-body {
+      font-size: 13.5px;
+      color: #444;
+      line-height: 1.6;
+    }
+
+    /* ── BULLETS ── */
+    .bullets {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .bullets li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13.5px;
+      color: #444;
+      line-height: 1.55;
+      padding-left: 5px;
+    }
+    .bullet-dot {
+      flex-shrink: 0;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #333333;
+      margin-top: 3.5px;
+    }
+
+    /* ── COMPARISON TABLE ── */
+    .table-wrap {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .table-wrap thead tr {
+      background: #1a1a1a;
+      color: #fff;
+    }
+    .table-wrap thead th {
+      padding: 6px 8px;
+      text-align: left;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      white-space: nowrap;
+    }
+    .table-wrap tbody tr:nth-child(odd)  { background: #eeeeee; }
+    .table-wrap tbody tr:nth-child(even) { background: #fff; }
+    .table-wrap tbody td {
+      padding: 6px 8px;
+      color: #444;
+      border: 0.5px solid #bbbbbb;
+      line-height: 1.45;
+      vertical-align: middle;
+    }
+    .table-wrap tbody td:first-child { font-weight: 600; white-space: nowrap; }
+    .col-tool    { width: 18%; }
+    .col-plan    { width: 20%; }
+    .col-limit   { width: 45%; }
+    .col-verdict { width: 17%; white-space: nowrap; }
+    .verdict-no  { color: #444444; font-weight: 700; }
+    .verdict-ok  { color: #111111; font-weight: 700; }
+
+    /* ── SOLICITUD HIGHLIGHT BOX ── */
+    .highlight-box {
+      background: #eeeeee;
+      border-left: 3px solid #333333;
+      padding: 10px 12px;
+      border-radius: 0 4px 4px 0;
+      font-size: 13.5px;
+      color: #333;
+      line-height: 1.6;
+    }
+
+    /* ── FOOTER ── */
+    .footer {
+      background: #f0f0f0;
+      border-top: 1.5px solid #555555;
+      padding: 7px 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .footer span {
+      font-size: 12px;
+      color: #888;
+    }
+
+    /* Print styles */
+    @media print {
+      body { background: none; padding: 0; }
+      .page { box-shadow: none; width: 100%; min-height: auto; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <div class="header-title">Solicitud de aprobación de herramienta</div>
+      <div class="header-sub">Uso de inteligencia artificial para desarrollo interno · Carrefour Argentina</div>
+    </div>
+    <div class="header-date">Julio 2026</div>
+  </div>
+  <div class="header-accent"></div>
+
+  <!-- BODY -->
+  <div class="body">
+
+    <!-- CONTEXTO -->
+    <div class="section">
+      <div class="section-title">Contexto</div>
+      <div class="section-line"></div>
+      <p class="section-body">
+        Durante los últimos <strong>6 meses</strong>, se desarrolló una herramienta de análisis de categorías para Carrefour Argentina
+        compuesta por tres dashboards interactivos: <strong>Participación de Marcas</strong>, <strong>Pirámide de Segmentación</strong>
+        y <strong>Cobertura de Mercado</strong>. Todo el desarrollo fue realizado íntegramente con <strong>Claude Pro</strong> (Anthropic),
+        cuyos costos fueron asumidos de manera personal.
+      </p>
+    </div>
+
+    <!-- IMPACTO -->
+    <div class="section">
+      <div class="section-title">Impacto generado</div>
+      <div class="section-line"></div>
+      <ul class="bullets">
+        <li><span class="bullet-dot"></span><span>Visualización inmediata de cobertura de surtido por competidor y segmento de precio.</span></li>
+        <li><span class="bullet-dot"></span><span>Identificación automática de oportunidades: EANs ausentes en CRF presentes en el mercado.</span></li>
+        <li><span class="bullet-dot"></span><span>Análisis de participación de marcas (importe y unidades) con comparativa CRF vs. MDO.</span></li>
+        <li><span class="bullet-dot"></span><span>Segmentación de precios por pirámide con recomendaciones de incorporación de surtido.</span></li>
+        <li><span class="bullet-dot"></span><span>Exportación de datos y recomendaciones en Excel con un solo clic, sin dependencias de TI.</span></li>
+      </ul>
+    </div>
+
+    <!-- ALTERNATIVAS -->
+    <div class="section">
+      <div class="section-title">Alternativas evaluadas</div>
+      <div class="section-line"></div>
+      <table class="table-wrap">
+        <thead>
+          <tr>
+            <th class="col-tool">Herramienta</th>
+            <th class="col-plan">Plan disponible</th>
+            <th class="col-limit">Limitación identificada</th>
+            <th class="col-verdict">Veredicto</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Gemini Pro</td>
+            <td>Empresa (disponible)</td>
+            <td>Errores frecuentes en el código generado: devuelve implementaciones con métodos faltantes y resultados incorrectos.</td>
+            <td class="verdict-no">✗ No apto</td>
+          </tr>
+          <tr>
+            <td>Cursor IDE</td>
+            <td>Free</td>
+            <td>Límite de uso mensual insuficiente para un desarrollo sostenido; el plan gratuito se agota rápidamente.</td>
+            <td class="verdict-no">✗ No apto</td>
+          </tr>
+          <tr>
+            <td>Claude Pro</td>
+            <td>Personal (pagado)</td>
+            <td>Sin limitaciones relevantes para el tipo de desarrollo requerido. Resultados consistentes y de alta calidad.</td>
+            <td class="verdict-ok">✔ Recomendado</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SOLICITUD -->
+    <div class="section">
+      <div class="section-title">Solicitud</div>
+      <div class="section-line"></div>
+      <div class="highlight-box">
+        Se solicita la <strong>aprobación formal del costo mensual de Claude Pro</strong> como gasto operativo del área,
+        dado que la herramienta desarrollada aporta valor concreto al negocio y no existe una alternativa gratuita
+        o corporativa disponible que cubra los mismos requerimientos con la misma calidad y confiabilidad.
+        El costo del plan es de <strong>USD 20 mensuales</strong>, lo que representa una inversión mínima en relación al valor generado.
+      </div>
+      <p style="font-size:12px; color:#555; margin-top:8px; line-height:1.5;">
+        <strong>Nota sobre seguridad:</strong> Claude Pro fue utilizado exclusivamente para el desarrollo del código.
+        Los datos de la empresa no son enviados a ningún servidor externo: el procesamiento del Excel ocurre
+        íntegramente en el navegador del usuario, por lo que la información comercial no está expuesta en ningún momento.
+      </p>
+    </div>
+
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <span>Carrefour Argentina · Analytics · Uso interno</span>
+    <span>Documento confidencial</span>
+  </div>
+
+</div>
+</body>
+</html>

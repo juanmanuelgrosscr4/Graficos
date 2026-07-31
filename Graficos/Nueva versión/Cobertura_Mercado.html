@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<link rel="icon" href="../favicon.ico"/>
+<title>Cobertura de Mercado</title>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@3.6.0/plotly.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: #f1f5f9;
+  color: #1e293b;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Header ── */
+.page-header {
+  background: #1d4ed8;
+  padding: 12px 20px;
+  display: flex; align-items: center; gap: 16px;
+  flex-shrink: 0;
+}
+.title-block { display: flex; flex-direction: column; flex: 1; }
+#mainTitle   { font-size: 17px; font-weight: 700; color: #fff; }
+.page-title  { font-size: 12px; color: #fff; opacity: .75; margin-top: 2px; }
+.file-status { font-size: 11px; color: rgba(255,255,255,.75); white-space: nowrap; }
+.file-status.loaded { color: #fff; font-weight: 600; }
+.upload-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; background: rgba(255,255,255,.15); color: #fff;
+  border-radius: 6px; font-size: 12px; font-weight: 600; font-family: inherit;
+  cursor: pointer; white-space: nowrap; transition: background .15s;
+  border: 1px solid rgba(255,255,255,.4);
+}
+.upload-btn:hover { background: rgba(255,255,255,.28); }
+.menu-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; background: rgba(255,255,255,.15); color: #fff;
+  border-radius: 6px; font-size: 12px; font-weight: 600;
+  text-decoration: none; white-space: nowrap; transition: background .15s;
+  border: 1px solid rgba(255,255,255,.4);
+}
+.menu-btn:hover { background: rgba(255,255,255,.28); }
+
+/* ── Filter bar ── */
+.filters-bar {
+  background: #fff; border-bottom: 1px solid #e2e8f0;
+  padding: 10px 20px; display: flex; gap: 12px;
+  flex-wrap: wrap; align-items: flex-start; flex-shrink: 0;
+}
+.filter-group { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 120px; }
+.filter-label {
+  font-size: 10px; font-weight: 700; color: #475569;
+  text-transform: uppercase; letter-spacing: .5px;
+}
+select {
+  font-family: inherit; font-size: 12px;
+  border: 1px solid #cbd5e1; border-radius: 6px;
+  padding: 5px 8px; background: #fff; color: #1e293b;
+  outline: none; transition: border-color .15s; cursor: pointer;
+}
+select:hover { border-color: #1d4ed8; }
+select:focus { border-color: #1d4ed8; box-shadow: 0 0 0 2px rgba(29,78,216,.15); }
+select[multiple] { resize: none; height: 62px; }
+
+/* ── View mode bar ── */
+#viewBar {
+  background: #fff; border-bottom: 1px solid #e2e8f0;
+  padding: 6px 20px; display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+}
+.vbtn {
+  padding: 5px 12px; border: 1px solid #cbd5e1; border-radius: 6px;
+  background: #fff; font-size: 11px; font-weight: 600;
+  cursor: pointer; color: #475569; white-space: nowrap; font-family: inherit;
+}
+.vbtn.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+.vbar-sep { width: 1px; height: 18px; background: #e2e8f0; margin: 0 4px; }
+.vbar-chk { display:flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:#475569; cursor:pointer; user-select:none; }
+.vbar-chk input { cursor:pointer; accent-color:#1d4ed8; width:14px; height:14px; }
+.vbar-sel { font-size:11px; font-weight:600; color:#475569; border:1px solid #cbd5e1; border-radius:6px; padding:3px 6px; background:#fff; cursor:pointer; font-family:inherit; }
+
+/* ── Body ── */
+#body { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+
+/* Chart area — altura fija, el gráfico no responde al resize de ventana */
+#chartArea { height: 330px; flex-shrink: 0; position: relative; }
+#chart     { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* Leyenda: solo bloquear clicks en ítems; el hover del gráfico funciona con
+   los elementos nsewdrag activos (dragmode:false previene zoom/pan en JS) */
+#chart .legend { pointer-events: none !important; cursor: default !important; }
+
+/* Logo row — debajo del gráfico, fuera del canvas de Plotly */
+#logoRow {
+  flex-shrink: 0; height: 52px;
+  display: flex; align-items: center; justify-content: space-around;
+  background: #fff; border-bottom: 1px solid #e2e8f0;
+  /* Los márgenes laterales se ajustan por JS para coincidir con el eje X de Plotly */
+}
+#logoRow img {
+  max-height: 38px; max-width: 60px;
+  object-fit: contain;
+  cursor: default;
+}
+
+/* ── Recommendations ── */
+#recArea {
+  flex-shrink: 0;
+  background: #fff; border-top: 2px solid #e2e8f0;
+}
+#recHead {
+  padding: 6px 20px; background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  position: sticky; top: 0; z-index: 1;
+}
+#recHead span { font-size: 12px; font-weight: 700; color: #1e293b; margin-right: 4px; }
+.fbtn {
+  padding: 3px 10px; border: 1px solid #cbd5e1; border-radius: 6px;
+  background: #fff; font-size: 11px; font-weight: 600;
+  cursor: pointer; color: #475569; font-family: inherit;
+}
+.fbtn-r1.active { background: #a16207; color: #fff; border-color: #a16207; }
+.fbtn-r2.active { background: #c2410c; color: #fff; border-color: #c2410c; }
+.fbtn-r3.active { background: #5b21b6; color: #fff; border-color: #5b21b6; }
+.fbtn-r4.active { background: #0f766e; color: #fff; border-color: #0f766e; }
+.fbtn-exp {
+  padding: 3px 10px; border: 1px solid #16a34a; border-radius: 6px;
+  background: #f0fdf4; font-size: 11px; font-weight: 600;
+  cursor: pointer; color: #15803d; font-family: inherit;
+}
+.fbtn-exp:hover { background: #16a34a; color: #fff; }
+.fbtn-exp2 {
+  margin-left: auto; padding: 3px 10px; border: 1px solid #16a34a; border-radius: 6px;
+  background: #f0fdf4; font-size: 11px; font-weight: 600;
+  cursor: pointer; color: #15803d; font-family: inherit;
+}
+.fbtn-exp2:hover { background: #16a34a; color: #fff; }
+#recBody { }
+.no-data  { color: #94a3b8; font-size: 12px; padding: 10px 20px; }
+.rec-hint { color: #94a3b8; font-size: 12px; padding: 10px 20px; font-style: italic; }
+
+/* ── Segment grid (recommendations) ── */
+.brands-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  padding: 10px 20px 14px;
+}
+.seg-col {
+  background: #FDFAF5;
+  border: 1px solid #E5DFD5;
+  border-radius: 10px;
+  overflow: hidden;
+  min-width: 0;
+}
+.seg-col-header {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.hcount {
+  font-size: 9.5px;
+  font-weight: 600;
+  opacity: .85;
+  white-space: nowrap;
+}
+.seg-col-body {
+  max-height: 300px;
+  overflow-y: auto;
+}
+.seg-brand-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-bottom: 1px solid #F0EBE3;
+}
+.seg-brand-row:last-child { border-bottom: none; }
+.seg-brand-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #1E1A14;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.seg-brand-pct {
+  font-size: 10px;
+  color: #64748b;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.seg-brand-badges {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.seg-brand-badge {
+  font-size: 8.5px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.sbadge-ok { background: #dbeafe; color: #1e40af; }
+.sbadge-no { background: #fee2e2; color: #991b1b; }
+.sbadge-r1 { background: #fef9c3; color: #a16207; }
+.sbadge-r2 { background: #ffedd5; color: #c2410c; }
+.sbadge-r3 { background: #ede9fe; color: #5b21b6; }
+.sbadge-r4 { background: #ccfbf1; color: #0f766e; }
+.seg-empty {
+  padding: 12px;
+  font-size: 11px;
+  color: #94a3b8;
+  font-style: italic;
+  text-align: center;
+}
+
+/* ── Logo tooltip ── */
+#logoTooltip {
+  position: fixed;
+  display: none;
+  background: #1e293b;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 5px;
+  pointer-events: none;
+  z-index: 9000;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,.3);
+}
+
+/* ── Processing overlay ── */
+.processing-overlay {
+  position: fixed; inset: 0; background: rgba(15,23,42,.7);
+  display: none; align-items: center; justify-content: center;
+  flex-direction: column; gap: 14px; z-index: 9999;
+}
+.processing-overlay.show { display: flex; }
+.processing-spinner {
+  width: 48px; height: 48px;
+  border: 5px solid rgba(255,255,255,.3);
+  border-top-color: #fff; border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+.processing-overlay span { color: #fff; font-size: 14px; font-weight: 600; }
+@keyframes spin { to { transform: rotate(360deg); } }
+/* ── KPI bar ── */
+#kpiBar{background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:4px 20px;display:flex;gap:20px;align-items:center;flex-shrink:0;font-size:11px;}
+.kpi-item{display:flex;flex-direction:column;gap:0;}
+.kpi-lbl{font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;}
+.kpi-val{font-size:13px;font-weight:700;color:#1e293b;}
+/* ── Active filter dot ── */
+.filter-label.has-filter::after{content:'●';color:#1d4ed8;font-size:7px;margin-left:3px;vertical-align:top;}
+/* ── Drag overlay ── */
+#dragOverlay{display:none;position:fixed;inset:0;z-index:9998;background:rgba(29,78,216,.12);border:4px dashed #1d4ed8;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#1d4ed8;pointer-events:none;}
+#dragOverlay.show{display:flex;}
+/* ── IDB restore banner ── */
+#idbBanner{display:none;background:#dbeafe;border-bottom:1px solid #93c5fd;padding:4px 20px;font-size:11px;color:#1e40af;align-items:center;gap:10px;flex-shrink:0;}
+#idbBanner.show{display:flex;}
+.idb-btn{font-size:10px;font-weight:700;padding:2px 8px;border:1px solid #1d4ed8;border-radius:4px;background:#1d4ed8;color:#fff;cursor:pointer;}
+.idb-dismiss{background:transparent;color:#1e40af;border-color:#93c5fd;}
+/* ── Misc ── */
+.vbtn.pin-on{background:#f59e0b!important;color:#fff!important;border-color:#d97706!important;}
+.comp-btns{display:flex;gap:3px;margin-top:3px;}
+.comp-mbtn{font-size:9px;font-weight:700;padding:1px 6px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;color:#475569;cursor:pointer;}
+.comp-mbtn:hover{background:#1d4ed8;color:#fff;border-color:#1d4ed8;}
+
+/* Borde negro en texto de segmentos de barra para contraste */
+#chart .barlayer text {
+  paint-order: stroke fill;
+  stroke: rgba(0,0,0,0.8);
+  stroke-width: 2.5px;
+  stroke-linejoin: round;
+}
+</style>
+</head>
+<body>
+
+<!-- Logo tooltip -->
+<div id="logoTooltip"></div>
+
+<!-- Processing overlay -->
+<div class="processing-overlay" id="processingOverlay">
+  <div class="processing-spinner"></div>
+  <span>Aguarde un momento mientras se procesa el archivo</span>
+</div>
+<div id="dragOverlay">📂 Soltá el archivo Excel aquí</div>
+<div id="idbBanner"><span>Último archivo: <b id="idbFileName"></b></span><button class="idb-btn" id="idbRestoreBtn">Restaurar</button><button class="idb-btn idb-dismiss" id="idbDismissBtn">✕</button></div>
+
+<!-- Header -->
+<header class="page-header">
+  <div class="title-block">
+    <h1 id="mainTitle">🏪 Cobertura de Mercado</h1>
+    <span class="page-title">· Presencia en Competidores por Segmento de Precio</span>
+  </div>
+  <a href="../Menu.html" class="menu-btn">&#127968; Menú principal</a>
+  <div style="flex:1;display:flex;justify-content:flex-end;align-items:center;gap:12px">
+    <button class="upload-btn" onclick="document.getElementById('fi').click()">📂 Cargar Excel</button>
+    <span class="file-status" id="statusBar">Sin datos cargados</span>
+    <input type="file" id="fi" accept=".xlsx" style="display:none"/>
+  </div>
+</header>
+
+<!-- Filter bar -->
+<div class="filters-bar">
+  <div class="filter-group">
+    <span class="filter-label">Región</span>
+    <select id="selReg" multiple size="4"></select>
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">Planograma</span>
+    <select id="selPg" multiple></select>
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">Proveedor</span>
+    <select id="selFab" multiple></select>
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">UN</span>
+    <select id="selUN" multiple></select>
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">Marca</span>
+    <select id="selMk" multiple></select>
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">Competidores</span>
+    <select id="selComp" multiple></select>
+    <div class="comp-btns"><button class="comp-mbtn" onclick="compSelAll()">Todos</button><button class="comp-mbtn" onclick="compSelNone()">Ninguno</button></div>
+  </div>
+</div>
+
+<!-- View mode bar -->
+<div id="viewBar">
+  <button class="vbtn active" id="vR" onclick="setView('refs')">Referencias</button>
+  <button class="vbtn"        id="vC" onclick="setView('cob')">% Cobertura</button>
+  <button class="vbtn"        id="vP" onclick="setView('part')">% Participación</button>
+  <div class="vbar-sep"></div>
+  <select id="selSec" class="vbar-sel" onchange="onSecChange()">
+    <option value="__ALL__">— Todas las secciones —</option>
+  </select>
+  <div class="vbar-sep"></div>
+  <button class="vbtn" id="vPin" onclick="togglePin()" title="Fijar orden de competidores">📌 Orden fijo</button>
+  <div class="vbar-sep"></div>
+  <label class="vbar-chk">
+    <input type="checkbox" id="chkBarText" onchange="showBarText=this.checked; render();">
+    Ver valores por segmento
+  </label>
+</div>
+<div id="kpiBar"><span class="kpi-lbl" style="color:#94a3b8">Cargá un archivo para ver métricas</span></div>
+
+<!-- Main body (scrollable) -->
+<div id="body">
+  <!-- Chart (fixed height, no resize) -->
+  <div id="chartArea">
+    <div id="chart"></div>
+  </div>
+  <!-- Logo strip (outside Plotly canvas, aligned to bars) -->
+  <div id="logoRow"></div>
+  <!-- Recommendations -->
+  <div id="recArea">
+    <div id="recHead">
+      <span>Recomendaciones</span>
+      <button class="fbtn fbtn-r1" id="rf1" onclick="setRF('r1')">Rec. Marca no CRF</button>
+      <button class="fbtn fbtn-r2" id="rf2" onclick="setRF('r2')">Rec. Marca si CRF</button>
+      <button class="fbtn fbtn-r3" id="rf3" onclick="setRF('r3')">Rec. EAN no CRF</button>
+      <button class="fbtn fbtn-r4" id="rf4" onclick="setRF('r4')">Rec. 1 Cadena</button>
+      <button class="fbtn fbtn-exp2" onclick="exportChart()">⬇ Exportar Gráfico visible</button>
+      <button class="fbtn fbtn-exp"  onclick="exportRec()" style="margin-left:6px;">⬇ Exportar Recomendaciones</button>
+    </div>
+    <div id="recBody"><div class="rec-hint">Seleccioná un filtro para ver recomendaciones.</div></div>
+  </div>
+</div>
+
+<script>
+// ── Constantes ────────────────────────────────────────────────
+const COL = {
+  EAN:0, SECCION:1, PLANOGRAMA:2, UN:3, DESCRIPCION:4,
+  STATUS_FC:5, FABRICANTE:6, MARCA:7, CATEGORIA:8,
+  RANGO:22, RANGO_UN:23
+};
+const REGION_BASE_START = 24, REGION_STEP = 12;
+const REGIONS = ['TOTAL NACIONAL','NOA','LITORAL','CUYO','CÓRDOBA','BS AS','PATAGONIA'];
+const RB = {};
+REGIONS.forEach((r,i) => { RB[r] = REGION_BASE_START + i * REGION_STEP; });
+// Bases de todas las regiones (para conteo de refs región-independiente)
+const ALL_RBS = REGIONS.map((_,i) => REGION_BASE_START + i * REGION_STEP);
+const RANGOS = ['BAJO','MEDIO','ALTO','ALTA GAMA'];
+
+// Paleta por segmento (uniforme para CRF y competidores)
+const RC = { 'BAJO':'#93c5fd', 'MEDIO':'#3b82f6', 'ALTO':'#1e40af', 'ALTA GAMA':'#6d28d9' };
+
+// Altura fija del gráfico (debe coincidir con el CSS de #chartArea)
+const CHART_H = 330;
+
+// Nombre de archivo de logo para cada bar label
+const LOGO_FILE = name => name === 'CRF' ? 'CARREFOUR' : name;
+
+// ── Estado ─────────────────────────────────────────────────────
+let ALLDATA   = [];
+let COMP_COLS = [];
+let CRF_COL   = -1;   // índice de la columna de presencia CARREFOUR en el Excel
+let viewMode    = 'refs';
+let rfMode      = 'none';   // no muestra recomendaciones hasta que el usuario toque un botón
+let showBarText  = false;
+let fixedOrder   = false;
+let lastSortOrder = [];
+
+// ── DOM ────────────────────────────────────────────────────────
+const selReg  = document.getElementById('selReg');
+const selSec  = document.getElementById('selSec');
+const selPg   = document.getElementById('selPg');
+const selUN   = document.getElementById('selUN');
+const selMk   = document.getElementById('selMk');
+const selComp = document.getElementById('selComp');
+const selFab  = document.getElementById('selFab');
+const overlay = document.getElementById('processingOverlay');
+const logoRow = document.getElementById('logoRow');
+
+// ── Selector helpers ──────────────────────────────────────────
+function getSel(el){ return [...el.selectedOptions].map(o => o.value); }
+function getRBs(){   return getSel(selReg).map(r => RB[r]).filter(Boolean); }
+
+// Valor especial "seleccionar todo"
+const ALL_OPT = '__ALL__';
+
+// Estado previo para selectores con exclusividad mutua
+const _prev = new WeakMap();
+
+function applyExclusive(sel) {
+  const curr = getSel(sel);
+  const prev = _prev.get(sel) || [ALL_OPT];
+  const hadAll  = prev.includes(ALL_OPT);
+  const hasAll  = curr.includes(ALL_OPT);
+  const hasOther = curr.some(v => v !== ALL_OPT);
+  if(hasAll && hasOther){
+    if(hadAll){
+      // Seleccionaban Todos; el usuario agregó específica → sacar Todos
+      [...sel.options].forEach(o => { if(o.value === ALL_OPT) o.selected = false; });
+    } else {
+      // El usuario seleccionó Todos → sacar específicas
+      [...sel.options].forEach(o => { if(o.value !== ALL_OPT) o.selected = false; });
+    }
+  } else if(!curr.length){
+    // Nada seleccionado → volver a Todos
+    [...sel.options].forEach(o => { if(o.value === ALL_OPT) o.selected = true; });
+  }
+  _prev.set(sel, getSel(sel));
+}
+
+function setAllOpt(sel){ _prev.set(sel, [ALL_OPT]); }
+
+// ── Región (TOTAL NACIONAL exclusivo) ─────────────────────────
+let prevRegSel = ['TOTAL NACIONAL'];
+REGIONS.forEach(r => {
+  const o = document.createElement('option');
+  o.value = r; o.textContent = r;
+  if(r === 'TOTAL NACIONAL') o.selected = true;
+  selReg.appendChild(o);
+});
+selReg.addEventListener('change', () => {
+  const curr = getSel(selReg);
+  const hadTN  = prevRegSel.includes('TOTAL NACIONAL');
+  const hasTN  = curr.includes('TOTAL NACIONAL');
+  const hasOther = curr.some(v => v !== 'TOTAL NACIONAL');
+  if(hasTN && hasOther){
+    if(hadTN){ [...selReg.options].forEach(o => { if(o.value === 'TOTAL NACIONAL') o.selected = false; }); }
+    else      { [...selReg.options].forEach(o => { if(o.value !== 'TOTAL NACIONAL') o.selected = false; }); }
+  } else if(!getSel(selReg).length){
+    [...selReg.options].forEach(o => { if(o.value === 'TOTAL NACIONAL') o.selected = true; });
+  }
+  prevRegSel = getSel(selReg);
+  render();
+});
+
+// Listeners con exclusividad para UN, Marca, Competidores
+selUN  .addEventListener('change', () => { applyExclusive(selUN);   render(); });
+selMk  .addEventListener('change', () => { applyExclusive(selMk);   render(); });
+selComp.addEventListener('change', () => { applyExclusive(selComp); render(); });
+selPg  .addEventListener('change', onPgChange);
+selFab .addEventListener('change', () => { applyExclusive(selFab); onFabChange(); });
+
+// ── View mode ──────────────────────────────────────────────────
+function setView(m){
+  viewMode = m;
+  ['vR','vC','vP'].forEach(id => document.getElementById(id).classList.remove('active'));
+  document.getElementById({refs:'vR', cob:'vC', part:'vP'}[m]).classList.add('active');
+  render();
+}
+
+// ── Rec filter ─────────────────────────────────────────────────
+function setRF(f){
+  rfMode = (rfMode === f) ? 'none' : f;
+  ['rf1','rf2','rf3','rf4'].forEach(id => document.getElementById(id).classList.remove('active'));
+  if(rfMode !== 'none'){
+    document.getElementById({r1:'rf1', r2:'rf2', r3:'rf3', r4:'rf4'}[rfMode]).classList.add('active');
+  }
+  renderRec();
+  updateKPI();
+  updateFilterDots();
+}
+
+function updateKPI(){
+  const bar=document.getElementById('kpiBar'); if(!bar||!ALLDATA.length)return;
+  const rows=getRows();
+  bar.innerHTML='<div class="kpi-item"><span class="kpi-lbl">EANs en selección</span><span class="kpi-val">'+rows.length.toLocaleString('es-AR')+'</span></div>'
+    +'<div class="kpi-item"><span class="kpi-lbl">Competidores</span><span class="kpi-val">'+COMP_COLS.length+'</span></div>';
+}
+function updateFilterDots(){
+  [{id:'selPg',dflt:'__TOT__'},{id:'selFab'},{id:'selUN'},{id:'selMk'},{id:'selComp'}].forEach(({id,dflt})=>{
+    const el=document.getElementById(id); if(!el) return;
+    const lbl=el.closest('.filter-group')?.querySelector('.filter-label'); if(!lbl) return;
+    const isDefault=dflt?[...el.selectedOptions].some(o=>o.value===dflt):[...el.selectedOptions].some(o=>o.value===ALL_OPT);
+    lbl.classList.toggle('has-filter', !isDefault);
+  });
+}
+function idbRestore(data, name){
+  if(!data||!data.allData) return;
+  ALLDATA   = data.allData;
+  COMP_COLS = data.compCols || [];
+  CRF_COL   = data.crfCol ?? -1;
+  selComp.innerHTML = `<option value="${ALL_OPT}" selected>— Todos —</option>`
+    + COMP_COLS.map(c => `<option value="${c.name}" selected>${c.name}</option>`).join('');
+  setAllOpt(selComp);
+  const secs = [...new Set(ALLDATA.map(r => r[COL.SECCION]).filter(Boolean))].sort();
+  selSec.innerHTML = `<option value="__ALL__">— Todas las secciones —</option>`
+    + secs.map(s => `<option value="${s}">${s}</option>`).join('');
+  const pls = [...new Set(ALLDATA.map(r => r[COL.PLANOGRAMA]))].sort();
+  selPg.innerHTML = `<option value="__TOT__" selected>— TOTAL SURTIDO —</option>`
+    + pls.map(p => `<option value="${p}">${p}</option>`).join('');
+  onPgChange();
+  document.getElementById('mainTitle').textContent =
+    '🏪 Cobertura de Mercado' + (data.titulo ? ' · ' + data.titulo : '');
+  setStatus(`✓ ${ALLDATA.length} EANs · ${COMP_COLS.length} competidores`, true);
+}
+function togglePin(){
+  fixedOrder=!fixedOrder;
+  const btn=document.getElementById('vPin');
+  btn.classList.toggle('pin-on', fixedOrder);
+  btn.title=fixedOrder?'Orden fijado — click para desfijar':'Fijar orden de competidores';
+}
+function compSelAll(){ [...selComp.options].forEach(o=>o.selected=true); _prev.set(selComp,getSel(selComp)); render(); }
+function compSelNone(){ [...selComp.options].forEach(o=>o.selected=false); _prev.set(selComp,[]); render(); }
+
+// ── Status ─────────────────────────────────────────────────────
+function setStatus(msg, ok){
+  const el = document.getElementById('statusBar');
+  el.textContent = msg;
+  el.className   = 'file-status' + (ok ? ' loaded' : '');
+  el.style.color = ok ? '' : '#fca5a5';
+}
+
+// ── File loading ───────────────────────────────────────────────
+function processArrayBuffer(buffer, _fn){
+  overlay.classList.add('show');
+  const w = new Worker(URL.createObjectURL(new Blob([WORKER_SRC], {type:'text/javascript'})));
+  w.onerror = err => { overlay.classList.remove('show'); setStatus('✗ ' + err.message, false); };
+  w.onmessage = function(ev){
+    overlay.classList.remove('show');
+    const d = ev.data;
+    if(!d.ok){
+      if(d.fatal){
+        setStatus('✗ Error: ' + (d.message || 'archivo inválido'), false);
+      } else {
+        setStatus('✗ El archivo no coincide con el formato esperado', false);
+        console.warn(d.errores.join('\n'));
+        const p = d.errores.slice(0,5);
+        const rest = d.errores.length > 5 ? `\n(y ${d.errores.length-5} más — ver consola)` : '';
+        const structHtml = '<details style="margin-top:8px;text-align:left"><summary style="font-size:10px;color:#6b7280;cursor:pointer">Ver columnas esperadas (primeras 24)</summary><div style="font-size:10px;font-family:monospace;max-height:120px;overflow-y:auto;margin-top:4px">' + ['EAN','SECCIÓN','PLANOGRAMA','UN','DESCRIPCIÓN','STATUS_FC','FABRICANTE','MARCA','CATEGORÍA','CRF UNIDADES','CRF IMPORTE NETO','MDO UNIDADES','MDO IMPORTE NETO','MDO UNIDADES (2)','MDO NETO (2)','PLANO-MARCA','UN-MARCA','PRECIO','PRECIO PLANO','PRECIO UN','PRECIO PROM PLANO MARCA','PRECIO PROM UN MARCA','RANGO PLANOGRAMA','RANGO UN'].map((h,i)=>`<div>${i+1}: ${h}</div>`).join('') + '</div></details>';
+        if(window.Swal){
+          Swal.fire({icon:'warning',title:'El archivo seleccionado no es correcto',
+            html:'<div style="text-align:left;font-size:12px;font-family:monospace;max-height:220px;overflow-y:auto">'
+              +p.map(x=>`<div style="margin:4px 0;padding:4px 6px;background:#fef3c7;border-radius:4px">${x}</div>`).join('')
+              +(rest?`<div style="margin-top:6px;color:#6b7280">${rest}</div>`:'')+'</div>'+structHtml});
+        } else { alert('El archivo no es correcto:\n\n'+p.join('\n')+rest); }
+      }
+      return;
+    }
+    ALLDATA   = d.allData;
+    COMP_COLS = d.compCols;
+    CRF_COL   = d.crfCol ?? -1;
+    selComp.innerHTML = `<option value="${ALL_OPT}" selected>— Todos —</option>`
+      + COMP_COLS.map(c => `<option value="${c.name}" selected>${c.name}</option>`).join('');
+    setAllOpt(selComp);
+    const secs = [...new Set(ALLDATA.map(r => r[COL.SECCION]).filter(Boolean))].sort();
+    selSec.innerHTML = `<option value="__ALL__">— Todas las secciones —</option>`
+      + secs.map(s => `<option value="${s}">${s}</option>`).join('');
+    const pls = [...new Set(ALLDATA.map(r => r[COL.PLANOGRAMA]))].sort();
+    selPg.innerHTML = `<option value="__TOT__" selected>— TOTAL SURTIDO —</option>`
+      + pls.map(p => `<option value="${p}">${p}</option>`).join('');
+    onPgChange();
+    const titulo = d.b1 || d.a1 || '';
+    document.getElementById('mainTitle').textContent =
+      '🏪 Cobertura de Mercado' + (titulo ? ' · ' + titulo : '');
+    setStatus(`✓ ${ALLDATA.length} EANs · ${COMP_COLS.length} competidores`, true);
+    idbSave({allData:ALLDATA,compCols:COMP_COLS,crfCol:CRF_COL,titulo:(titulo||'')},_fn);
+  };
+  w.postMessage(buffer);
+}
+document.getElementById('fi').addEventListener('change', e => {
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => processArrayBuffer(ev.target.result, file.name);
+  reader.readAsArrayBuffer(file);
+  e.target.value = '';
+});
+
+// ── Filter helpers ─────────────────────────────────────────────
+// Base de datos filtrada por Sección (o todo si __ALL__)
+function getSecBase(){
+  const sec = selSec.value;
+  return sec === '__ALL__' ? ALLDATA : ALLDATA.filter(r => r[COL.SECCION] === sec);
+}
+
+function onSecChange(){
+  const base = getSecBase();
+  // Reconstruir Planograma
+  const pls = [...new Set(base.map(r => r[COL.PLANOGRAMA]))].sort();
+  selPg.innerHTML = `<option value="__TOT__" selected>— TOTAL SURTIDO —</option>`
+    + pls.map(p => `<option value="${p}">${p}</option>`).join('');
+  setAllOpt(selPg);
+  onPgChange();
+}
+
+function onPgChange(){
+  const base = getSecBase();
+  const pgs = getSel(selPg);
+  const isT = pgs.includes('__TOT__') || !pgs.length;
+  let rows = isT ? base : base.filter(r => pgs.includes(r[COL.PLANOGRAMA]));
+  // Fabricante
+  const fabs = [...new Set(rows.map(r => String(r[COL.FABRICANTE]||'').trim()).filter(Boolean))].sort();
+  selFab.innerHTML = `<option value="${ALL_OPT}" selected>— Todos —</option>`
+    + fabs.map(f => `<option value="${f}">${f}</option>`).join('');
+  setAllOpt(selFab);
+  onFabChange(rows);
+}
+function onFabChange(baseRows){
+  let rows = baseRows;
+  if(!rows){
+    const base = getSecBase();
+    const pgs = getSel(selPg);
+    const isT = pgs.includes('__TOT__') || !pgs.length;
+    rows = isT ? base : base.filter(r => pgs.includes(r[COL.PLANOGRAMA]));
+  }
+  const selFabs = getSel(selFab).filter(v => v !== ALL_OPT);
+  if(selFabs.length) rows = rows.filter(r => selFabs.includes(String(r[COL.FABRICANTE]||'').trim()));
+  // UN
+  const uns = [...new Set(rows.map(r => r[COL.UN]))].sort();
+  selUN.innerHTML = `<option value="${ALL_OPT}" selected>— Todas —</option>`
+    + uns.map(u => `<option value="${u}">${u}</option>`).join('');
+  setAllOpt(selUN);
+  // Marca
+  const mks = [...new Set(rows.map(r => r[COL.MARCA]))].sort();
+  selMk.innerHTML = `<option value="${ALL_OPT}" selected>— Todas —</option>`
+    + mks.map(m => `<option value="${m}">${m}</option>`).join('');
+  setAllOpt(selMk);
+  render();
+}
+
+function getRows(){
+  let rows = getSecBase();
+  const rbs = getRBs();
+  const pgs = getSel(selPg);
+  const isT = pgs.includes('__TOT__') || !pgs.length;
+  if(!isT) rows = rows.filter(r => pgs.includes(r[COL.PLANOGRAMA]));
+  const uns = getSel(selUN).filter(v => v !== ALL_OPT);
+  if(uns.length) rows = rows.filter(r => uns.includes(r[COL.UN]));
+  const mks = getSel(selMk).filter(v => v !== ALL_OPT);
+  if(mks.length) rows = rows.filter(r => mks.includes(r[COL.MARCA]));
+  const fabs = getSel(selFab).filter(v => v !== ALL_OPT);
+  if(fabs.length) rows = rows.filter(r => fabs.includes(String(r[COL.FABRICANTE]||'')));
+  // Presencia en ≥2 cadenas (MDO no requerido aquí — se filtra por separado para cob/part)
+  rows = rows.filter(r => {
+    let cnt = rbs.some(rb => num(r[rb+3]) > 0) ? 1 : 0;
+    for(const c of COMP_COLS){
+      if(num(r[c.col]) > 0){ cnt++; if(cnt >= 2) return true; }
+    }
+    return cnt >= 2;
+  });
+  return rows;
+}
+
+// ── Cálculo ────────────────────────────────────────────────────
+function num(v){ return parseFloat(v) || 0; }
+
+// rowsRef = universo seleccionado sin filtro de cadenas ni MDO → base de referencias
+// rowsMdo = ≥2 cadenas + MDO$ > 0 → base de cob/part para competidores
+// isCRF   = true → usa CRF$ como métrica de ventas; refs = región-independiente (ALL_RBS)
+function calcComp(rowsRef, rowsMdo, rbs, isCRF, col){
+  const sumMdo = r => rbs.reduce((s,rb) => s + num(r[rb+6]), 0);
+  const sumCRF = r => rbs.reduce((s,rb) => s + num(r[rb+3]), 0);
+  // refs: columna de presencia binaria (CARREFOUR para CRF, columna propia para competidores)
+  const hasCovRef = r => num(r[col]) > 0;
+  // cob/part: para CRF se usan solo las regiones seleccionadas
+  const hasCov    = r => isCRF ? rbs.some(rb => num(r[rb+3]) > 0)     : num(r[col]) > 0;
+  const out = {};
+  RANGOS.forEach(seg => {
+    const sr     = rowsRef.filter(r => r[COL.RANGO] === seg);
+    const cov    = sr.filter(hasCovRef);   // refs (región-independiente para CRF)
+    if(isCRF){
+      const covSales      = sr.filter(hasCov);                             // EANs rowsRef con ventas CRF (para mdo/covMdo)
+      const srMdo         = rowsMdo.filter(r => r[COL.RANGO] === seg);
+      const crfInUniverse = srMdo.filter(hasCovRef);                       // EANs universo ≥2 cadenas con presencia CRF
+      out[seg] = {
+        total:       sr.length,
+        cov:         cov.length,                                            // refs: presencia CRF desde rowsRef
+        covMdoCount: crfInUniverse.length,                                  // cob: CRF en universo ≥2 cadenas, este segmento
+        mdo:         covSales.reduce((s,r) => s + sumCRF(r), 0),
+        covMdo:      covSales.reduce((s,r) => s + sumCRF(r), 0),
+      };
+    } else {
+      const srMdo   = rowsMdo.filter(r => r[COL.RANGO] === seg);
+      const covMdoR = srMdo.filter(hasCov);
+      out[seg] = {
+        total:       srMdo.length,
+        cov:         cov.length,
+        covMdoCount: covMdoR.length,
+        mdo:         srMdo.reduce((s,r) => s + sumMdo(r), 0),
+        covMdo:      covMdoR.reduce((s,r) => s + sumMdo(r), 0),
+      };
+    }
+  });
+  const covRef = rowsRef.filter(hasCovRef);
+  if(isCRF){
+    const covSalesAll    = rowsRef.filter(hasCov);
+    const crfInUnivAll   = rowsMdo.filter(hasCovRef);               // CRF en universo ≥2 cadenas (total)
+    out._t = {
+      total:       rowsRef.length,
+      cov:         covRef.length,
+      covMdoCount: crfInUnivAll.length,                             // cob: CRF en universo ≥2 cadenas
+      mdo:         covSalesAll.reduce((s,r) => s + sumCRF(r), 0),
+      covMdo:      covSalesAll.reduce((s,r) => s + sumCRF(r), 0),
+    };
+  } else {
+    const covMdoRows = rowsMdo.filter(hasCov);
+    out._t = {
+      total:       rowsMdo.length,
+      cov:         covRef.length,
+      covMdoCount: covMdoRows.length,
+      mdo:         rowsMdo.reduce((s,r) => s + sumMdo(r), 0),
+      covMdo:      covMdoRows.reduce((s,r) => s + sumMdo(r), 0),
+    };
+  }
+  return out;
+}
+
+function segVal(segD, mktTotal, mktMdo){
+  if(viewMode==='refs')  return segD.cov;                                         // EANs con presencia (sin MDO)
+  if(viewMode==='cob')   return mktTotal > 0 ? segD.covMdoCount / mktTotal * 100 : 0; // % sobre mercado con venta
+  if(viewMode==='part')  return mktMdo   > 0 ? segD.covMdo      / mktMdo   * 100 : 0; // % MDO$ con presencia
+  return 0;
+}
+function totVal(d, mktT, mktM){
+  if(viewMode==='refs')  return d._t.cov;
+  if(viewMode==='cob')   return mktT > 0 ? d._t.covMdoCount / mktT * 100 : 0;
+  if(viewMode==='part')  return mktM > 0 ? d._t.covMdo      / mktM * 100 : 0;
+  return 0;
+}
+
+// Formatea enteros con punto como separador de miles (13717 → "13.717")
+const fmtN = n => new Intl.NumberFormat('es-AR').format(Math.round(n));
+
+// ── Render ─────────────────────────────────────────────────────
+function render(){
+  if(!ALLDATA.length) return;
+  const rows    = getRows();           // ≥2 cadenas, sin MDO → universo cob/part
+  const rbs     = getRBs();
+  const sumMdo  = r => rbs.reduce((s,rb) => s + num(r[rb+6]), 0);
+  // rowsMdo: ≥2 cadenas + MDO > 0 → denominador y numerador de cobertura/participación
+  const rowsMdo = rows.filter(r => rbs.some(rb => num(r[rb+6]) > 0));
+  // rowsRef: sección + planograma/UN/marca, sin restricción de cadenas ni MDO
+  //          → conteo real de referencias por cadena (región-independiente)
+  let rowsRef = getSecBase();
+  const _pgsR = getSel(selPg); const _isTR = _pgsR.includes('__TOT__') || !_pgsR.length;
+  if(!_isTR) rowsRef = rowsRef.filter(r => _pgsR.includes(r[COL.PLANOGRAMA]));
+  const _unsR = getSel(selUN).filter(v => v !== ALL_OPT);
+  if(_unsR.length) rowsRef = rowsRef.filter(r => _unsR.includes(r[COL.UN]));
+  const _mksR = getSel(selMk).filter(v => v !== ALL_OPT);
+  if(_mksR.length) rowsRef = rowsRef.filter(r => _mksR.includes(r[COL.MARCA]));
+  const _fabsR = getSel(selFab).filter(v => v !== ALL_OPT);
+  if(_fabsR.length) rowsRef = rowsRef.filter(r => _fabsR.includes(String(r[COL.FABRICANTE]||'')));
+
+  // Mercado total por segmento (con venta, para cob/part)
+  const mkt = {};
+  RANGOS.forEach(seg => {
+    const srMdo = rowsMdo.filter(r => r[COL.RANGO] === seg);
+    mkt[seg] = { total:srMdo.length, mdo:srMdo.reduce((s,r) => s + sumMdo(r), 0) };
+  });
+  const mktT = rowsMdo.length;
+  const mktM = rowsMdo.reduce((s,r) => s + sumMdo(r), 0);
+
+  // ─ Calcular TODOS los competidores y ver cuáles tienen presencia ─
+  const allCompData = {};
+  COMP_COLS.forEach(c => {
+    const d = calcComp(rowsRef, rowsMdo, rbs, false, c.col);
+    if(d._t.cov > 0) allCompData[c.name] = d;
+  });
+  const activeNames = COMP_COLS.map(c => c.name).filter(n => allCompData[n]);
+
+  // Actualizar selector de competidores: solo mostrar los activos
+  // Preservar el estado de selección del usuario
+  const prevDesel = new Set(
+    [...selComp.options]
+      .filter(o => o.value !== ALL_OPT && !o.selected)
+      .map(o => o.value)
+  );
+  const wasAllMode = getSel(selComp).includes(ALL_OPT);
+
+  selComp.innerHTML = `<option value="${ALL_OPT}"${wasAllMode ? ' selected' : ''}>— Todos —</option>`
+    + activeNames.map(name => {
+        const sel = wasAllMode || !prevDesel.has(name);
+        return `<option value="${name}"${sel ? ' selected' : ''}>${name}</option>`;
+      }).join('');
+  // Actualizar prev state del selector
+  _prev.set(selComp, getSel(selComp));
+
+  // Filtrar por lo que el usuario tiene seleccionado en el selector de competidores
+  const selCompVals = getSel(selComp).filter(v => v !== ALL_OPT);
+  const visNames = getSel(selComp).includes(ALL_OPT) ? activeNames : selCompVals;
+
+  if(!rows.length){
+    Plotly.purge('chart');
+    updateLogoRow([], {});
+    renderRec();
+    return;
+  }
+
+  const crfD = calcComp(rowsRef, rowsMdo, rbs, true, CRF_COL);
+
+  const compsD = {};
+  COMP_COLS.filter(c => visNames.includes(c.name) && allCompData[c.name]).forEach(c => {
+    compsD[c.name] = allCompData[c.name];
+  });
+
+  // ── Helpers de valor por barra ──
+  // Cobertura : covMdoCount / mktT  (EANs del competidor en universo ≥2 cadenas / total universo)
+  // Participación: cov / fullD._t.cov  (distribución del surtido propio por segmento)
+  function getBarSegVal(n, segD, fullD){
+    if(viewMode === 'refs') return segD.cov;
+    if(viewMode === 'cob')  return mktT > 0 ? segD.covMdoCount / mktT * 100 : 0;
+    if(viewMode === 'part') return fullD._t.cov > 0 ? segD.cov / fullD._t.cov * 100 : 0;
+    return 0;
+  }
+  function getBarTotVal(n, d){
+    if(viewMode === 'refs') return d._t.cov;
+    if(viewMode === 'cob')  return mktT > 0 ? d._t.covMdoCount / mktT * 100 : 0;
+    if(viewMode === 'part') return d._t.cov;   // anotación muestra cantidad de refs propias
+    return 0;
+  }
+
+  // Ordenar por valor total DESC
+  const _fresh = Object.entries(compsD)
+    .sort((a,b) => getBarTotVal(b[0], b[1]) - getBarTotVal(a[0], a[1]))
+    .map(([n]) => n);
+  const sorted = (fixedOrder && lastSortOrder.length)
+    ? [...lastSortOrder.filter(n => _fresh.includes(n)), ..._fresh.filter(n => !lastSortOrder.includes(n))]
+    : _fresh;
+  if(!fixedOrder) lastSortOrder = _fresh;
+
+  const labels = ['CRF', ...sorted];
+
+  const traces = RANGOS.map(seg => {
+    const mktSeg = mkt[seg];
+    const yVals = labels.map(n => {
+      const fullD = n==='CRF' ? crfD : compsD[n];
+      const segD  = fullD?.[seg];
+      return segD ? getBarSegVal(n, segD, fullD) : 0;
+    });
+    const dispVals = labels.map((n, i) => {
+      const sv = yVals[i];
+      if(sv <= 0) return '';
+      return viewMode==='refs' ? fmtN(sv) : sv.toFixed(1) + '%';
+    });
+    return {
+      name: seg, type:'bar', x:labels,
+      y: yVals,
+      // customdata[0] = valor display según viewMode para ese segmento
+      customdata: dispVals.map(disp => [disp]),
+      text:         showBarText ? dispVals : labels.map(() => ''),
+      textposition: 'inside',
+      insidetextanchor: 'middle',
+      textfont: { size:10, color:'#fff', family:'Segoe UI' },
+      textangle: 0,
+      constraintext: 'none',
+      marker: { color: RC[seg] },
+      // Tooltip: nombre + segmento + valor del modo actual
+      hovertemplate:
+        '<b>%{x}</b><br>'
+        + seg + ': <b>%{customdata[0]}</b>'
+        + '<extra></extra>',
+    };
+  });
+
+  // Posición de la anotación = tope real de la barra apilada (suma de segVal por segmento)
+  // El texto muestra el totVal (métrica consolidada), que puede diferir en modos %
+  const annotations = labels.map(n => {
+    const d = n==='CRF' ? crfD : compsD[n]; if(!d) return null;
+    const barTop = RANGOS.reduce((sum, seg) => {
+      const sd = d[seg]; if(!sd) return sum;
+      return sum + getBarSegVal(n, sd, d);
+    }, 0);
+    const v = getBarTotVal(n, d);
+    return {
+      x:n, y:barTop, xref:'x', yref:'y',
+      showarrow:false, yanchor:'bottom', yshift: showBarText ? 10 : 4,
+      text: viewMode==='cob' ? v.toFixed(1)+'%' : fmtN(v),
+      font:{ size:13, color:'#1e293b', family:'Segoe UI' },
+    };
+  }).filter(Boolean);
+
+  const yTitle = viewMode==='refs' ? 'N° de referencias'
+               : viewMode==='cob'  ? '% Cobertura'
+               :                     '% Participación';
+
+  // Calcular bargap para que cada barra no supere 93 px de ancho
+  const _plotW   = document.getElementById('chart').offsetWidth - 52 - 20; // ancho - margin l - r
+  const _slot    = _plotW / labels.length;
+  const _bargap  = Math.max(0, 1 - 93 / _slot);
+
+  Plotly.react('chart', traces, {
+    barmode: 'stack',
+    height:  CHART_H,
+    bargap:  _bargap,
+    margin:  { l:52, r:20, t:40, b:16 },
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor:  'rgba(0,0,0,0)',
+    yaxis: {
+      title:    { text:yTitle, font:{size:11} },
+      gridcolor:'#e2e8f0', tickfont:{size:11},
+      rangemode:'tozero',
+    },
+    xaxis: {
+      showticklabels: false,   // logos reemplazan las etiquetas
+      fixedrange: true,
+    },
+    dragmode: false,           // deshabilita drag/zoom/select con el mouse
+    clickmode: 'event',        // dispara evento interno pero no hace selección visual
+    legend: {
+      orientation:'h', y:1.06, x:.5, xanchor:'center', yanchor:'bottom',
+      font:{ size:11 },
+      itemclick:       false,  // click en ítem de leyenda no oculta trace
+      itemdoubleclick: false,  // doble-click tampoco
+    },
+    annotations,
+    showlegend: true,
+  }, {
+    responsive:     false,
+    displayModeBar: false,
+    scrollZoom:     false,     // sin zoom con rueda del mouse
+    doubleClick:    false,     // doble-click no resetea el gráfico
+    editable:       false,
+  }).then(() => {
+    updateLogoRow(labels, compsD);
+  });
+
+  renderRec();
+}
+
+// ── Logo row (debajo del gráfico, fuera del canvas de Plotly) ─
+const _lt = document.getElementById('logoTooltip');
+
+function updateLogoRow(labels, compsD){
+  logoRow.innerHTML = '';
+  if(!labels.length) return;
+
+  const chartDiv = document.getElementById('chart');
+  if(!chartDiv._fullLayout) return;
+
+  const fl = chartDiv._fullLayout;
+  const ml = fl.margin.l;
+  const mr = fl.margin.r;
+
+  // Alinear márgenes del logo row con el eje X de Plotly
+  logoRow.style.paddingLeft  = ml + 'px';
+  logoRow.style.paddingRight = mr + 'px';
+
+  labels.forEach(name => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'flex:1;display:flex;align-items:center;justify-content:center;cursor:default;';
+
+    const img = document.createElement('img');
+    img.alt = name;
+    const fname = LOGO_FILE(name);
+    img.src = `logos/${encodeURIComponent(fname)}.png`;
+    img.onerror = function(){
+      if(!this.dataset.tried){
+        this.dataset.tried = '1';
+        this.src = `logos/${encodeURIComponent(fname)}.jpg`;
+      } else {
+        this.style.display = 'none';
+      }
+    };
+
+    // Tooltip custom (más confiable que title en distintos navegadores)
+    wrap.addEventListener('mouseenter', () => {
+      _lt.textContent = name;
+      _lt.style.display = 'block';
+    });
+    wrap.addEventListener('mousemove', e => {
+      _lt.style.left = (e.clientX + 12) + 'px';
+      _lt.style.top  = (e.clientY - 32) + 'px';
+    });
+    wrap.addEventListener('mouseleave', () => {
+      _lt.style.display = 'none';
+    });
+
+    wrap.appendChild(img);
+    logoRow.appendChild(wrap);
+  });
+}
+
+// ── Recomendaciones ────────────────────────────────────────────
+function computeT3(brows, rbs){
+  const sumMdo = r => rbs.reduce((s,rb) => s + num(r[rb+6]), 0);
+  const tot = brows.reduce((s,r) => s + sumMdo(r), 0);
+  if(tot <= 0) return [];
+  const sorted = [...brows].sort((a,b) => sumMdo(b) - sumMdo(a));
+  let cum = 0; const top = [];
+  for(const r of sorted){ cum += sumMdo(r); top.push(r); if(cum >= tot*.8) break; }
+  return top.filter(r => !rbs.some(rb => num(r[rb+3]) > 0));
+}
+
+/// Helper compartido: calcula y filtra marcas según rfMode
+function getRecBrands(rows, rbs){
+  const sumMdo = r => rbs.reduce((s,rb) => s + num(r[rb+6]), 0);
+  const sumCRF = r => rbs.reduce((s,rb) => s + num(r[rb+3]), 0);
+  const sumCRI = r => rbs.reduce((s,rb) => s + num(r[rb+0]), 0);
+  const totMdo = rows.reduce((s,r) => s + sumMdo(r), 0);
+  const byM = {};
+  rows.forEach(r => { const m = r[COL.MARCA]; if(!byM[m]) byM[m]=[]; byM[m].push(r); });
+  let ms = Object.entries(byM).map(([marca, brows]) => {
+    const bcu    = brows.reduce((s,r) => s + sumCRF(r), 0);
+    const bci    = brows.reduce((s,r) => s + sumCRI(r), 0);
+    const bmi    = brows.reduce((s,r) => s + sumMdo(r), 0);
+    const pi     = totMdo > 0 ? bmi / totMdo * 100 : 0;
+    const c      = bcu > 0 ? 1 : 0;
+    const r1     = (c === 0 && pi >= 3) ? 1 : 0;
+    const fcVals = [...new Set(brows.map(r => String(r[COL.STATUS_FC]||'').trim()))];
+    const r2     = (c === 1 && bci > 0 && pi >= 3 && fcVals.some(v => v==='2' || v==='3')) ? 1 : 0;
+    const miss   = computeT3(brows, rbs);
+    const r3     = (c === 1 && miss.length > 0) ? 1 : 0;
+    return { m:marca, brows, c, r1, r2, r3, r4:0, fcVals, miss, pi };
+  }).sort((a,b) => b.pi - a.pi);
+
+  // ── R4: marcas con >3% MDO presentes en exactamente 1 cadena (CRF o competidor) ──
+  // Usa ALLDATA sin el filtro de ≥2 cadenas para capturar marcas de distribución escasa.
+  let r4totMdo = 0;
+  if(rfMode === 'r4'){
+    let r4rows = ALLDATA;
+    const pgs4 = getSel(selPg); const isT4 = pgs4.includes('__TOT__') || !pgs4.length;
+    if(!isT4) r4rows = r4rows.filter(r => pgs4.includes(r[COL.PLANOGRAMA]));
+    const uns4 = getSel(selUN).filter(v => v !== ALL_OPT);
+    if(uns4.length) r4rows = r4rows.filter(r => uns4.includes(r[COL.UN]));
+    const mks4 = getSel(selMk).filter(v => v !== ALL_OPT);
+    if(mks4.length) r4rows = r4rows.filter(r => mks4.includes(r[COL.MARCA]));
+    r4rows = r4rows.filter(r => rbs.some(rb => num(r[rb+6]) > 0)); // MDO > 0
+    r4totMdo = r4rows.reduce((s,r) => s + sumMdo(r), 0);
+    const byM4 = {};
+    r4rows.forEach(r => { const m=r[COL.MARCA]; if(!byM4[m]) byM4[m]=[]; byM4[m].push(r); });
+    ms = Object.entries(byM4).map(([marca, brows]) => {
+      const bmi = brows.reduce((s,r) => s + sumMdo(r), 0);
+      const pi  = r4totMdo > 0 ? bmi / r4totMdo * 100 : 0;
+      if(pi < 3) return null;
+      let chains = 0;
+      if(brows.some(r => rbs.some(rb => num(r[rb+3]) > 0))) chains++;
+      for(const cc of COMP_COLS){ if(brows.some(r => num(r[cc.col]) > 0)) chains++; }
+      if(chains !== 1) return null;
+      const bcu = brows.reduce((s,r) => s + sumCRF(r), 0);
+      return { m:marca, brows, c:bcu>0?1:0, r1:0, r2:0, r3:0, r4:1, fcVals:[], miss:[], pi };
+    }).filter(Boolean).sort((a,b) => b.pi - a.pi);
+  } else {
+    if(rfMode === 'r1')      ms = ms.filter(x => x.r1);
+    else if(rfMode === 'r2') ms = ms.filter(x => x.r2);
+    else if(rfMode === 'r3') ms = ms.filter(x => x.r3);
+  }
+  return { ms, sumMdo, r4totMdo };
+}
+
+// ── Exportar gráfico visible a Excel ──────────────────────────
+function exportChart(){
+  if(!ALLDATA.length){
+    if(window.Swal) Swal.fire({icon:'info', title:'Sin datos', text:'Cargá un archivo primero.'});
+    else alert('Cargá un archivo primero.');
+    return;
+  }
+  const rows    = getRows();
+  const rbs     = getRBs();
+  const sumMdo  = r => rbs.reduce((s,rb) => s + num(r[rb+6]), 0);
+  const rowsMdo = rows.filter(r => rbs.some(rb => num(r[rb+6]) > 0));
+
+  // rowsRef (mismo cálculo que render)
+  let rowsRef = getSecBase();
+  const _pgsR = getSel(selPg); const _isTR = _pgsR.includes('__TOT__') || !_pgsR.length;
+  if(!_isTR) rowsRef = rowsRef.filter(r => _pgsR.includes(r[COL.PLANOGRAMA]));
+  const _unsR = getSel(selUN).filter(v => v !== ALL_OPT);
+  if(_unsR.length) rowsRef = rowsRef.filter(r => _unsR.includes(r[COL.UN]));
+  const _mksR = getSel(selMk).filter(v => v !== ALL_OPT);
+  if(_mksR.length) rowsRef = rowsRef.filter(r => _mksR.includes(r[COL.MARCA]));
+
+  const mktT = rowsMdo.length;
+  const mktM = rowsMdo.reduce((s,r) => s + sumMdo(r), 0);
+
+  const crfD = calcComp(rowsRef, rowsMdo, rbs, true, CRF_COL);
+
+  // Competidores visibles
+  const allCompData = {};
+  COMP_COLS.forEach(c => {
+    const d = calcComp(rowsRef, rowsMdo, rbs, false, c.col);
+    if(d._t.cov > 0) allCompData[c.name] = d;
+  });
+  const activeNames  = COMP_COLS.map(c => c.name).filter(n => allCompData[n]);
+  const selCompVals  = getSel(selComp).filter(v => v !== ALL_OPT);
+  const visNames     = getSel(selComp).includes(ALL_OPT) ? activeNames : selCompVals;
+  const compsD       = {};
+  COMP_COLS.filter(c => visNames.includes(c.name) && allCompData[c.name])
+           .forEach(c => { compsD[c.name] = allCompData[c.name]; });
+
+  // Helpers de valor — misma lógica que getBarSegVal/getBarTotVal en render()
+  function segV(n, sd, fullD){
+    return {
+      refs: sd.cov,
+      cob:  mktT > 0 ? sd.covMdoCount / mktT * 100 : 0,
+      part: fullD._t.cov > 0 ? sd.cov / fullD._t.cov * 100 : 0,
+    };
+  }
+  function totV(n, d){
+    return {
+      refs: d._t.cov,
+      cob:  mktT > 0 ? d._t.covMdoCount / mktT * 100 : 0,
+      part: d._t.cov,   // refs count (anotación en modo part)
+    };
+  }
+
+  // Ordenar competidores por refs total DESC (igual que el gráfico en modo refs)
+  const sorted = Object.keys(compsD).sort((a,b) => totV(b, compsD[b]).refs - totV(a, compsD[a]).refs);
+  const labels = ['CRF', ...sorted];
+
+  const regionStr = getSel(selReg).join(' / ');
+  const secStr    = selSec.value === '__ALL__' ? 'Todas' : selSec.value;
+
+  const dataRows = [['Región','Sección','Cadena','Segmento','Referencias','% Cobertura','% Participación']];
+  labels.forEach(n => {
+    const d = n==='CRF' ? crfD : compsD[n]; if(!d) return;
+    RANGOS.forEach(seg => {
+      const sd = d[seg]; if(!sd) return;
+      const v = segV(n, sd, d);
+      dataRows.push([regionStr, secStr, n, seg,
+        v.refs,
+        parseFloat(v.cob.toFixed(2)),
+        parseFloat(v.part.toFixed(2)),
+      ]);
+    });
+    const t = totV(n, d);
+    dataRows.push([regionStr, secStr, n, 'TOTAL',
+      t.refs,
+      parseFloat(t.cob.toFixed(2)),
+      parseFloat(t.part.toFixed(2)),
+    ]);
+  });
+
+  const wb  = XLSX.utils.book_new();
+  const ws  = XLSX.utils.aoa_to_sheet(dataRows);
+  ws['!cols'] = [14,14,22,12,14,14,16].map(w => ({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws, 'Gráfico visible');
+  const fecha = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `Grafico_Cobertura_${fecha}.xlsx`);
+}
+
+// ── Exportar recomendaciones a Excel ──────────────────────────
+function exportRec(){
+  if(rfMode === 'none'){
+    if(window.Swal) Swal.fire({ icon:'info', title:'Seleccioná un filtro', text:'Elegí R1, R2, R3 o R4 antes de exportar.' });
+    else alert('Seleccioná un filtro de recomendaciones antes de exportar.');
+    return;
+  }
+  const rows = getRows();
+  const rbs  = getRBs();
+  const { ms, sumMdo, r4totMdo } = getRecBrands(rows, rbs);
+  if(!ms.length){
+    if(window.Swal) Swal.fire({ icon:'warning', title:'Sin datos', text:'No hay recomendaciones con el filtro actual.' });
+    else alert('Sin recomendaciones con el filtro actual.');
+    return;
+  }
+
+  const recLabel = { r1:'Rec. Marca no CRF', r2:'Rec. Marca sí CRF', r3:'Rec. EAN faltante', r4:'Rec. 1 Sola Cadena' };
+  const regionStr = getSel(selReg).join(' / ');
+
+  const totMdoAll = rfMode === 'r4' && r4totMdo
+    ? r4totMdo
+    : rows.reduce((s,r) => s + sumMdo(r), 0);
+
+  // ── Hoja 1: Resumen por marca-segmento ──
+  const summaryRows = [['Región','Marca','% MDO Total','Segmento','% MDO Segmento','Presencia CRF','Tipo Rec.','Detalle']];
+  RANGOS.forEach(seg => {
+    const segMdo = rfMode === 'r4'
+      ? ms.reduce((s,b) => s + b.brows.filter(r => r[COL.RANGO] === seg).reduce((ss,r) => ss + sumMdo(r), 0), 0)
+      : rows.filter(r => r[COL.RANGO] === seg).reduce((s,r) => s + sumMdo(r), 0);
+    ms.forEach(brand => {
+      const segBrows = brand.brows.filter(r => r[COL.RANGO] === seg);
+      if(!segBrows.length) return;
+      const bmi = segBrows.reduce((s,r) => s + sumMdo(r), 0);
+      if(bmi <= 0) return;
+      const pi_seg = segMdo > 0 ? parseFloat((bmi / segMdo * 100).toFixed(2)) : 0;
+      let detalle = '';
+      if(brand.r2) detalle = 'FC: ' + brand.fcVals.filter(v => v==='2'||v==='3').join('/');
+      if(brand.r3) detalle = brand.miss.slice(0,5).map(r => r[COL.DESCRIPCION] || String(r[COL.EAN]||'')).join(' / ');
+      if(brand.r4){
+        let chain = brand.c ? 'CRF' : '';
+        if(!chain){ for(const cc of COMP_COLS){ if(brand.brows.some(r => num(r[cc.col]) > 0)){ chain = cc.name; break; } } }
+        detalle = 'Solo en: ' + chain;
+      }
+      summaryRows.push([
+        regionStr, brand.m, parseFloat(brand.pi.toFixed(2)), seg, pi_seg,
+        brand.c ? 'Sí' : 'No', recLabel[rfMode] || rfMode, detalle,
+      ]);
+    });
+  });
+
+  // ── Hoja 2: Detalle por EAN ──
+  // Para R3: set de EANs faltantes del top-80%
+  const missSet = new Set(ms.flatMap(b => b.miss.map(r => String(r[COL.EAN]||''))));
+
+  const eanRows = [['Región','Planograma','UN','Marca','Segmento','EAN','Descripción',
+                    'MDO$','% MDO Total','CRF Presente','Tipo Rec.','Faltante top-80%','FC Status']];
+  ms.forEach(brand => {
+    // EANs ordenados por MDO$ descendente
+    const sorted = [...brand.brows].sort((a,b) => sumMdo(b) - sumMdo(a));
+    sorted.forEach(r => {
+      const mdo   = sumMdo(r);
+      const ean   = String(r[COL.EAN] || '');
+      const crfPr = rbs.some(rb => num(r[rb+3]) > 0) ? 'Sí' : 'No';
+      eanRows.push([
+        regionStr,
+        r[COL.PLANOGRAMA],
+        r[COL.UN],
+        brand.m,
+        r[COL.RANGO],
+        ean,
+        r[COL.DESCRIPCION],
+        parseFloat(mdo.toFixed(2)),
+        totMdoAll > 0 ? parseFloat((mdo / totMdoAll * 100).toFixed(4)) : 0,
+        crfPr,
+        recLabel[rfMode] || rfMode,
+        brand.r3 && missSet.has(ean) ? 'Sí' : '',
+        String(r[COL.STATUS_FC] || '').trim(),
+      ]);
+    });
+  });
+
+  const wb  = XLSX.utils.book_new();
+
+  const ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
+  ws1['!cols'] = [14,28,14,12,16,14,22,50].map(w => ({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws1, 'Resumen por Marca');
+
+  const ws2 = XLSX.utils.aoa_to_sheet(eanRows);
+  ws2['!cols'] = [14,16,16,22,12,16,40,12,12,13,22,16,10].map(w => ({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws2, 'Detalle por EAN');
+
+  const fecha = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `Recomendaciones_${rfMode.toUpperCase()}_${fecha}.xlsx`);
+}
+
+function renderRec(){
+  const body = document.getElementById('recBody');
+  if(rfMode === 'none'){
+    body.innerHTML = '<div class="rec-hint">Seleccioná un filtro para ver recomendaciones.</div>';
+    return;
+  }
+
+  const rows = getRows();
+  const rbs  = getRBs();
+  const { ms, sumMdo, r4totMdo } = getRecBrands(rows, rbs);
+
+  if(!ms.length){
+    body.innerHTML = '<div class="no-data">Sin recomendaciones con el filtro actual.</div>';
+    return;
+  }
+
+  // Para R4, el denominador del segmento se calcula sobre las filas propias de cada marca
+  // (ya integradas en brand.brows desde r4rows, no desde rows del mercado ≥2 cadenas).
+  const useR4denom = rfMode === 'r4';
+
+  // ── Grid de 4 columnas por segmento (al estilo "script andre") ──
+  const SEG_BG  = { 'BAJO':'#93c5fd', 'MEDIO':'#3b82f6', 'ALTO':'#1e40af', 'ALTA GAMA':'#6d28d9' };
+  const SEG_TXT = { 'BAJO':'#1e3a5f', 'MEDIO':'#fff',    'ALTO':'#fff',     'ALTA GAMA':'#fff'    };
+  const esc     = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  const html = '<div class="brands-grid">' + RANGOS.map(seg => {
+    // MDO total del segmento: para R4 se calcula desde las brows propias; si no, desde rows filtradas
+    const segMdo = useR4denom
+      ? ms.reduce((s, b) => s + b.brows.filter(r => r[COL.RANGO] === seg).reduce((ss,r) => ss + sumMdo(r), 0), 0)
+      : rows.filter(r => r[COL.RANGO] === seg).reduce((s,r) => s + sumMdo(r), 0);
+
+    // Marcas de la lista actual que tienen MDO en este segmento
+    const segBrands = ms.map(brand => {
+      const segBrows = brand.brows.filter(r => r[COL.RANGO] === seg);
+      if(!segBrows.length) return null;
+      const bmi = segBrows.reduce((s,r) => s + sumMdo(r), 0);
+      if(bmi <= 0) return null;
+      const pi_seg = segMdo > 0 ? bmi / segMdo * 100 : 0;
+      return { ...brand, pi_seg };
+    }).filter(Boolean).sort((a,b) => b.pi_seg - a.pi_seg);
+
+    const bg  = SEG_BG[seg];
+    const txt = SEG_TXT[seg];
+    const cnt = segBrands.length;
+
+    let rowsHtml = '';
+    if(!cnt){
+      rowsHtml = '<div class="seg-empty">Sin marcas en este segmento</div>';
+    } else {
+      rowsHtml = segBrands.map(b => {
+        const crfBadge = b.c
+          ? '<span class="seg-brand-badge sbadge-ok">✓ CRF</span>'
+          : '<span class="seg-brand-badge sbadge-no">✗ CRF</span>';
+        let recBadge = '';
+        if(b.r1) recBadge = '<span class="seg-brand-badge sbadge-r1">★ R1</span>';
+        else if(b.r2){
+          const fc = b.fcVals.filter(v => v==='2'||v==='3').join('/');
+          recBadge = `<span class="seg-brand-badge sbadge-r2">⚠ FC${fc}</span>`;
+        }
+        else if(b.r3) recBadge = `<span class="seg-brand-badge sbadge-r3">◐ ${b.miss.length}EAN</span>`;
+        else if(b.r4) recBadge = '<span class="seg-brand-badge sbadge-r4">◉ 1 cadena</span>';
+        return `<div class="seg-brand-row">
+          <span class="seg-brand-name" title="${esc(b.m)}">${esc(b.m)}</span>
+          <span class="seg-brand-pct">${b.pi_seg.toFixed(1)}%</span>
+          <div class="seg-brand-badges">${crfBadge}${recBadge}</div>
+        </div>`;
+      }).join('');
+    }
+
+    return `<div class="seg-col">
+      <div class="seg-col-header" style="background:${bg};color:${txt}">
+        <span>${seg}</span>
+        <span class="hcount">${cnt} marca${cnt!==1?'s':''}</span>
+      </div>
+      <div class="seg-col-body">${rowsHtml}</div>
+    </div>`;
+  }).join('') + '</div>';
+
+  body.innerHTML = html;
+}
+
+
+// ── IndexedDB persistencia ──────────────────────────────
+const _IDB={n:'carrefour_analytics',s:'files',k:'last',ttl:4*3600*1000};
+function idbOpen(cb){const rq=indexedDB.open(_IDB.n,1);rq.onupgradeneeded=e=>e.target.result.createObjectStore(_IDB.s);rq.onsuccess=e=>cb(e.target.result);rq.onerror=()=>{};}
+function idbSave(data,name){idbOpen(db=>{try{db.transaction(_IDB.s,'readwrite').objectStore(_IDB.s).put({data,name,ts:Date.now()},_IDB.k);}catch(e){}});}
+function idbLoad(cb){idbOpen(db=>{try{const rq=db.transaction(_IDB.s,'readonly').objectStore(_IDB.s).get(_IDB.k);rq.onsuccess=e=>{cb(e.target.result||null);};rq.onerror=()=>cb(null);}catch(e){cb(null);}});}
+function idbTryRestore(){idbLoad(d=>{if(!d)return;const b=document.getElementById('idbBanner');if(!b)return;document.getElementById('idbFileName').textContent=d.name;b.classList.add('show');document.getElementById('idbRestoreBtn').onclick=()=>{b.classList.remove('show');idbRestore(d.data,d.name);};document.getElementById('idbDismissBtn').onclick=()=>b.classList.remove('show');});}
+
+// ── Drag & Drop ─────────────────────────────────────────
+(()=>{const ov=document.getElementById('dragOverlay');let dc=0;
+  document.addEventListener('dragenter',e=>{if([...e.dataTransfer.types].includes('Files')){e.preventDefault();dc++;ov.classList.add('show');}});
+  document.addEventListener('dragover',e=>e.preventDefault());
+  document.addEventListener('dragleave',()=>{if(--dc<=0){dc=0;ov.classList.remove('show');}});
+  document.addEventListener('drop',e=>{e.preventDefault();dc=0;ov.classList.remove('show');const f=e.dataTransfer.files[0];if(!f||!f.name.toLowerCase().endsWith('.xlsx'))return;const rd=new FileReader();rd.onload=ev=>processArrayBuffer(ev.target.result,f.name);rd.readAsArrayBuffer(f);});
+})();
+
+window.addEventListener('load', idbTryRestore);
+// ── Web Worker ─────────────────────────────────────────────────
+const WORKER_SRC = `
+self.importScripts('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+
+const COL = {
+  EAN:0, SECCION:1, PLANOGRAMA:2, UN:3, DESCRIPCION:4,
+  STATUS_FC:5, FABRICANTE:6, MARCA:7, CATEGORIA:8,
+  RANGO:22, RANGO_UN:23
+};
+
+const RBH = ['CRF $','%PG $','%UN $','CRF uni','%PG uni','%UN uni','MDO $','%PG $','%UN $','MDO uni','%PG uni','%UN uni'];
+const EH = [
+  'EAN','SECCIÓN','PLANOGRAMA','UN','DESCRIPCIÓN','STATUS_FC','FABRICANTE','MARCA','CATEGORÍA',
+  'CRF UNIDADES','CRF IMPORTE NETO','MDO UNIDADES','MDO IMPORTE NETO','MDO UNIDADES','MDO NETO',
+  'PLANO-MARCA','UN-MARCA','PRECIO','PRECIO PLANO','PRECIO UN','PRECIO PROMEDIO PLANO MARCA','PRECIO PROMEDIO UN MARCA',
+  'RANGO PLANOGRAMA','RANGO UN',
+].concat(RBH).concat(RBH).concat(RBH).concat(RBH).concat(RBH).concat(RBH).concat(RBH)
+ .concat([
+  'YTD Share $ 2025','YTD Share $ 2026','YTD Dif Sh $',
+  'YTD Share VOL 2025','YTD Share VOL 2026','YTD Dif Sh VOL',
+  'YTD % Prog RM $','YTD % Prog CRF $','YTD GAP CRF vs RM $',
+  'YTD % Prog RM VOL','YTD % Prog CRF VOL','YTD GAP CRF vs RM VOL',
+]);
+
+function validar(allRows){
+  const hdr  = allRows[2] || [];
+  const norm = s => String(s==null?'':s).trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
+  const errs = [];
+  for(let i = 0; i < EH.length; i++){
+    if(norm(hdr[i]) !== norm(EH[i]))
+      errs.push('Columna '+(i+1)+': se esperaba "'+EH[i]+'" y se encontró "'+String(hdr[i]==null?'':hdr[i]).trim()+'"');
+  }
+  return errs;
+}
+
+self.onmessage = function(e){
+  try{
+    const wb = XLSX.read(new Uint8Array(e.data), {type:'array'});
+    const ws = wb.Sheets['Export'];
+    if(!ws){ self.postMessage({ok:false,fatal:true,message:'No se encontró la hoja "Export"'}); return; }
+    const a1 = ws['A1'] ? String(ws['A1'].v).trim() : '';
+    const b1 = ws['B1'] ? String(ws['B1'].v).trim() : '';
+    const allRows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+    const errs = validar(allRows);
+    if(errs.length){ self.postMessage({ok:false,fatal:false,errores:errs}); return; }
+
+    const hdr = allRows[2] || [];
+    const compCols = [];
+    let crfCol = -1;
+    for(let i = 120; i < hdr.length; i++){
+      const nm = String(hdr[i]||'').trim();
+      if(!nm) continue;
+      if(nm.toUpperCase().includes('CARREFOUR')){
+        if(crfCol === -1) crfCol = i;  // primera columna CARREFOUR = presencia CRF
+      } else {
+        compCols.push({name:nm, col:i});
+      }
+    }
+
+    const dataRows = allRows.slice(3).filter(r => r[COL.PLANOGRAMA] && r[COL.UN] && r[COL.MARCA]);
+    if(!dataRows.length){ self.postMessage({ok:false,fatal:true,message:'Sin datos en hoja Export'}); return; }
+
+    dataRows.forEach(r => {
+      r[COL.SECCION]     = String(r[COL.SECCION]||'').trim();
+      r[COL.PLANOGRAMA]  = String(r[COL.PLANOGRAMA]).trim();
+      r[COL.UN]          = String(r[COL.UN]).trim();
+      r[COL.MARCA]       = String(r[COL.MARCA]).trim();
+      r[COL.DESCRIPCION] = String(r[COL.DESCRIPCION]||'').trim();
+      r[COL.EAN]         = String(r[COL.EAN]||'').trim();
+      r[COL.STATUS_FC]   = String(r[COL.STATUS_FC]||'').trim();
+      r[COL.FABRICANTE]  = String(r[COL.FABRICANTE]||'').trim();
+      r[COL.RANGO]       = String(r[COL.RANGO]||'').trim();
+    });
+
+    self.postMessage({ok:true, allData:dataRows, compCols, crfCol, a1, b1});
+  } catch(err){
+    self.postMessage({ok:false, fatal:true, message:err.message});
+  }
+};
+`;
+</script>
+</body>
+</html>
